@@ -1,0 +1,84 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import Resume, JobDescription, MatchScore
+from app.schemas import MatchScoreOut
+from app.api.routes.auth import get_current_user
+from app.models import User
+from app.services.gemini import generate_json
+from app.prompts import MATCH_ENGINE_PROMPT, RESUME_SUGGEST_PROMPT
+import json
+
+router = APIRouter(prefix="/match", tags=["match"])
+
+
+@router.post("/", response_model=MatchScoreOut)
+async def run_match(
+    resume_id: int,
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    resume = db.query(Resume).filter(Resume.id == resume_id, Resume.user_id == current_user.id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    job = db.query(JobDescription).filter(JobDescription.id == job_id, JobDescription.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    prompt = MATCH_ENGINE_PROMPT.format(
+        resume_json=json.dumps(resume.parsed_json, indent=2)[:4000],
+        jd_json=json.dumps(job.parsed_json, indent=2)[:4000]
+    )
+    result = await generate_json(prompt)
+
+    ms = MatchScore(
+        user_id=current_user.id,
+        resume_id=resume_id,
+        job_id=job_id,
+        overall_score=float(result.get("overall_score", 0)),
+        keyword_score=float(result.get("keyword_score", 0)),
+        skill_score=float(result.get("skill_score", 0)),
+        experience_score=float(result.get("experience_score", 0)),
+        ats_score=float(result.get("ats_score", 0)),
+        details_json=result
+    )
+    db.add(ms)
+    db.commit()
+    db.refresh(ms)
+    return ms
+
+
+@router.get("/", response_model=list[MatchScoreOut])
+def list_matches(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(MatchScore).filter(MatchScore.user_id == current_user.id).order_by(MatchScore.created_at.desc()).all()
+
+
+@router.get("/{match_id}", response_model=MatchScoreOut)
+def get_match(match_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    ms = db.query(MatchScore).filter(MatchScore.id == match_id, MatchScore.user_id == current_user.id).first()
+    if not ms:
+        raise HTTPException(status_code=404, detail="Match score not found")
+    return ms
+
+
+@router.post("/suggest")
+async def get_suggestions(
+    resume_id: int,
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    resume = db.query(Resume).filter(Resume.id == resume_id, Resume.user_id == current_user.id).first()
+    job = db.query(JobDescription).filter(JobDescription.id == job_id, JobDescription.user_id == current_user.id).first()
+    if not resume or not job:
+        raise HTTPException(status_code=404, detail="Resume or job not found")
+
+    jd_keywords = job.parsed_json.get("keywords", []) + job.parsed_json.get("required_skills", []) if job.parsed_json else []
+    prompt = RESUME_SUGGEST_PROMPT.format(
+        resume_json=json.dumps(resume.parsed_json, indent=2)[:4000],
+        jd_keywords=json.dumps(jd_keywords)
+    )
+    result = await generate_json(prompt)
+    return result
