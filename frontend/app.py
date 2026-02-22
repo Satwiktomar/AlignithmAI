@@ -18,15 +18,15 @@ if "token" not in st.session_state:
 user = st.session_state.get("user", {})
 
 NAV_ITEMS = [
-    ("🏠", "Dashboard", "dashboard"),
-    ("📄", "Resume", "resume"),
-    ("💼", "Jobs", "jobs"),
-    ("🎯", "Match", "match"),
-    ("✍️", "Cover Letter", "coverletter"),
-    ("📊", "Skill Gap", "skillgap"),
-    ("🤖", "Recruiter Sim", "recruiter"),
-    ("🗂️", "Projects", "projects"),
-    ("🔖", "Versions", "versions"),
+    ("Dashboard", "dashboard"),
+    ("Resume", "resume"),
+    ("Jobs", "jobs"),
+    ("Match", "match"),
+    ("Cover Letter", "coverletter"),
+    ("Skill Gap", "skillgap"),
+    ("Recruiter Sim", "recruiter"),
+    ("Projects", "projects"),
+    ("Versions", "versions"),
 ]
 
 if "page" not in st.session_state:
@@ -34,24 +34,24 @@ if "page" not in st.session_state:
 
 with st.sidebar:
     st.markdown(f"""
-<div style="padding: 1.2rem 0.5rem 1.5rem; border-bottom: 1px solid #1e2130; margin-bottom: 0.8rem;">
-  <div style="font-size:1.2rem; font-weight:800; background:linear-gradient(135deg,#6366f1,#a78bfa);
+<div style="padding: 1.2rem 0.5rem 1.5rem; border-bottom: 1px solid #1e293b; margin-bottom: 0.8rem;">
+  <div style="font-size:1.2rem; font-weight:800; font-family:'Fira Code', monospace; background:linear-gradient(135deg,#3B82F6,#2563EB);
               -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
     ⚡ Alignithm.AI
   </div>
-  <div style="font-size:0.75rem; color:#6b7280; margin-top:0.2rem;">Career Intelligence Platform</div>
+  <div style="font-size:0.75rem; color:#64748b; margin-top:0.2rem; font-family:'Fira Sans', sans-serif;">Career Intelligence Platform</div>
 </div>
 """, unsafe_allow_html=True)
 
-    for icon, label, key in NAV_ITEMS:
+    for label, key in NAV_ITEMS:
         is_active = st.session_state["page"] == key
-        btn_style = "background: rgba(99,102,241,0.15) !important; color:#c4c9dc !important;" if is_active else ""
-        if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True):
+        btn_style = "background: rgba(59, 130, 246, 0.15) !important; color:#f8fafc !important;" if is_active else ""
+        if st.button(f"{label}", key=f"nav_{key}", use_container_width=True):
             st.session_state["page"] = key
             st.rerun()
 
-    st.markdown("<div style='height:1px; background:#1e2130; margin:1rem 0;'></div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='font-size:0.78rem; color:#6b7280; padding:0 0.5rem;'>👤 {user.get('name','User')}</div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:1px; background:#1e293b; margin:1rem 0;'></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:0.78rem; color:#64748b; padding:0 0.5rem;'>👤 {user.get('name','User')}</div>", unsafe_allow_html=True)
     if st.button("Sign Out", key="logout_btn", use_container_width=True):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
