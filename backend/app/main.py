@@ -11,7 +11,7 @@ import time
 from dotenv import load_dotenv
 
 from app.database import engine, Base, migrate_columns
-from app.models import User, Project, Resume, ResumeVersion, JobDescription, CoverLetter, MatchScore, CachedRoadmap  # noqa: F401
+from app.models import *
 from app.api.routes import auth, resume, jobs, match, projects, coverletter, advanced
 from app.limiter import limiter
 
