@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.limiter import limiter
 from app.models import CoverLetter, Resume, JobDescription
 from app.schemas import CoverLetterCreate, CoverLetterOut
 from app.api.routes.auth import get_current_user
 from app.models import User
+from app.services.auth import decrypt_api_key
 from app.services.gemini import generate
 from app.prompts import COVER_LETTER_PROMPT
 import json
@@ -15,7 +17,9 @@ VALID_TONES = ["formal", "semi-formal", "startup", "direct", "corporate"]
 
 
 @router.post("/generate", response_model=CoverLetterOut)
+@limiter.limit("30/minute")
 async def generate_cover_letter(
+    request: Request,
     cl_data: CoverLetterCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -32,7 +36,7 @@ async def generate_cover_letter(
         resume_json=json.dumps(resume.parsed_json, indent=2)[:4000],
         jd_json=json.dumps(job.parsed_json, indent=2)[:3000]
     )
-    generated_text = await generate(prompt)
+    generated_text = await generate(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
 
     cl = CoverLetter(
         user_id=current_user.id,

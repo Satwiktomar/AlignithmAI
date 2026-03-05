@@ -1,10 +1,10 @@
 import streamlit as st
+import os
 from utils.styles import apply_styles
 from utils.auth import show_auth_page, api
 
 st.set_page_config(
     page_title="Alignithm.AI",
-    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -12,52 +12,108 @@ st.set_page_config(
 apply_styles()
 
 if "token" not in st.session_state:
+    pass  # Token stored in session state only (not URL params for security)
+
+if "token" not in st.session_state:
     show_auth_page()
     st.stop()
 
 user = st.session_state.get("user", {})
 
-NAV_ITEMS = [
-    ("Dashboard", "dashboard"),
-    ("Resume", "resume"),
-    ("Jobs", "jobs"),
-    ("Match", "match"),
-    ("Cover Letter", "coverletter"),
-    ("Skill Gap", "skillgap"),
-    ("Recruiter Sim", "recruiter"),
-    ("Projects", "projects"),
-    ("Versions", "versions"),
-]
+NAV_ITEMS = {
+    "Dashboard": "dashboard",
+    "Resume": "resume",
+    "Jobs": "jobs",
+    "Match": "match",
+    "Cover Letter": "coverletter",
+    "Skill Gap": "skillgap",
+    "Roadmap": "roadmap",
+    "Recruiter Sim": "recruiter",
+    "Projects": "projects",
+    "Versions": "versions",
+    "Settings": "profile",
+}
 
 if "page" not in st.session_state:
     st.session_state["page"] = "dashboard"
 
 with st.sidebar:
-    st.markdown(f"""
-<div style="padding: 1.2rem 0.5rem 1.5rem; border-bottom: 1px solid #1e293b; margin-bottom: 0.8rem;">
-  <div style="font-size:1.2rem; font-weight:800; font-family:'Fira Code', monospace; background:linear-gradient(135deg,#3B82F6,#2563EB);
-              -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
-    ⚡ Alignithm.AI
-  </div>
-  <div style="font-size:0.75rem; color:#64748b; margin-top:0.2rem; font-family:'Fira Sans', sans-serif;">Career Intelligence Platform</div>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='padding:0.5rem 0 0.25rem;font-size:1.1rem;font-weight:700;color:#f0f0f0;'>Alignithm.AI</div>",
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        "<div style='font-size:0.78rem;color:#6b7280;margin-bottom:0.75rem;'>Career Intelligence Platform</div>",
+        unsafe_allow_html=True
+    )
+    st.markdown("<hr style='border-color:#2a2d3a;margin:0.5rem 0;'>", unsafe_allow_html=True)
 
-    for label, key in NAV_ITEMS:
-        is_active = st.session_state["page"] == key
-        btn_style = "background: rgba(59, 130, 246, 0.15) !important; color:#f8fafc !important;" if is_active else ""
-        if st.button(f"{label}", key=f"nav_{key}", use_container_width=True):
-            st.session_state["page"] = key
+    selected = st.radio(
+        "Navigation",
+        options=list(NAV_ITEMS.keys()),
+        index=list(NAV_ITEMS.values()).index(st.session_state["page"]),
+        label_visibility="collapsed"
+    )
+
+    st.session_state["page"] = NAV_ITEMS[selected]
+
+    st.markdown("<hr style='border-color:#2a2d3a;margin:0.5rem 0;'>", unsafe_allow_html=True)
+
+    # AI Model Toggle
+    ollama_status = None
+    try:
+        import requests as _req
+        _backend = os.getenv("BACKEND_URL", "http://localhost:8000")
+        _r = api("GET", "/advanced/ollama-status")
+        if _r and _r.ok:
+            ollama_status = _r.json()
+    except Exception:
+        pass
+
+    ollama_available = ollama_status.get("available", False) if ollama_status else False
+    ollama_ready = ollama_status.get("model_ready", False) if ollama_status else False
+    status_dot = "🟢" if ollama_ready else ("🟡" if ollama_available else "🔴")
+
+    current_pref = user.get("prefer_local_model", False)
+
+    use_local = st.toggle(
+        f"🖥️ Local AI {status_dot}",
+        value=current_pref,
+        help="Toggle ON to use local Ollama model. Toggle OFF to use Gemini Cloud AI.",
+        key="local_ai_toggle"
+    )
+
+    if use_local != current_pref:
+        r_toggle = api("PUT", "/auth/me", json={"prefer_local_model": use_local})
+        if r_toggle and r_toggle.ok:
+            st.session_state["user"]["prefer_local_model"] = use_local
             st.rerun()
 
-    st.markdown("<div style='height:1px; background:#1e293b; margin:1rem 0;'></div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='font-size:0.78rem; color:#64748b; padding:0 0.5rem;'>👤 {user.get('name','User')}</div>", unsafe_allow_html=True)
-    if st.button("Sign Out", key="logout_btn", use_container_width=True):
-        for k in list(st.session_state.keys()):
-            del st.session_state[k]
+    mode_label = "Local AI (Ollama)" if use_local else "Cloud AI (Gemini)"
+    st.markdown(
+        f"<div style='font-size:0.72rem;color:#6b7280;margin:-0.25rem 0 0.5rem;'>{mode_label}</div>",
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<hr style='border-color:#2a2d3a;margin:0.5rem 0;'>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='font-size:0.78rem;color:#6b7280;margin-bottom:0.5rem;'>{user.get('email', '')}</div>",
+        unsafe_allow_html=True
+    )
+
+    if st.button("Sign Out", use_container_width=True):
+        st.query_params.clear()
+        st.session_state.clear()
         st.rerun()
 
-page = st.session_state.get("page", "dashboard")
+if not user.get("has_api_key", False):
+    st.warning(
+        "No Gemini API key configured — AI features won't work. "
+        "Go to **Settings** → **API Key** to add yours (free at [aistudio.google.com](https://aistudio.google.com)).",
+        icon="⚠️"
+    )
+
+page = st.session_state["page"]
 
 if page == "dashboard":
     from pages_custom.dashboard import render
@@ -77,6 +133,9 @@ elif page == "coverletter":
 elif page == "skillgap":
     from pages_custom.skillgap import render
     render()
+elif page == "roadmap":
+    from pages_custom.roadmap import render
+    render()
 elif page == "recruiter":
     from pages_custom.recruiter import render
     render()
@@ -85,4 +144,7 @@ elif page == "projects":
     render()
 elif page == "versions":
     from pages_custom.versions import render
+    render()
+elif page == "profile":
+    from pages_custom.profile import render
     render()

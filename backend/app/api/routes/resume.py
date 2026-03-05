@@ -8,12 +8,16 @@ from app.schemas import ResumeOut, ResumeVersionOut, ResumeVersionCreate
 from app.api.routes.auth import get_current_user
 from app.models import User
 from app.services.parser import extract_text
+from app.services.auth import decrypt_api_key
 from app.services.gemini import generate_json
 from app.prompts import RESUME_PARSE_PROMPT
 import json
 from datetime import date
 
 router = APIRouter(prefix="/resume", tags=["resume"])
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 
 @router.post("/upload", response_model=ResumeOut)
@@ -22,7 +26,27 @@ async def upload_resume(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    ext = "." + file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+
     file_bytes = await file.read()
+
+    if len(file_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large ({len(file_bytes) // (1024*1024)}MB). Maximum is 10MB."
+        )
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="File is empty")
+
     raw_text = extract_text(file.filename, file_bytes)
     if not raw_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from file")
@@ -31,7 +55,7 @@ async def upload_resume(
         current_date=date.today().strftime("%B %d, %Y"),
         resume_text=raw_text[:12000]
     )
-    parsed = await generate_json(prompt)
+    parsed = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
 
     resume = Resume(
         user_id=current_user.id,

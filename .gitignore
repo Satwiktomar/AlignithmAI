@@ -34,9 +34,9 @@ venv.bak/
 # Environment & secrets
 # ===========================
 .env
-.env.*
+.env.local
+.env.production
 !.env.example
-*.env
 
 # ===========================
 # Databases
@@ -99,8 +99,6 @@ embeddings/
 uploads/
 temp/
 tmp/
-*.pdf
-*.docx
 
 # ===========================
 # Node (if any)
@@ -108,4 +106,8 @@ tmp/
 node_modules/
 npm-debug.log*
 
+# ===========================
+# Agent & tooling
+# ===========================
 .agent/
+.gemini/
