@@ -5,6 +5,10 @@ Uses all-MiniLM-L6-v2 for semantic similarity with an in-memory
 hash-based cache to avoid re-encoding identical texts.
 """
 
+import os
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("HF_HOME", os.path.join(os.path.dirname(__file__), ".hf_cache"))
+
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import hashlib

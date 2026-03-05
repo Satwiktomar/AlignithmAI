@@ -59,6 +59,10 @@ services:
           name: rolefit-backend
           type: web
           envVarKey: ML_INTERNAL_KEY
+      - key: HF_HOME
+        value: /tmp/hf_cache
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
 
   - type: web
     name: rolefit-frontend

@@ -85,6 +85,7 @@ embeddings/
 *.pickle
 *.npy
 .transformers_cache/
+.hf_cache/
 .cache/
 
 # ===========================
