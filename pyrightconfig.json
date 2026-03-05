@@ -1,0 +1,24 @@
+{
+    "executionEnvironments": [
+        {
+            "root": "./backend",
+            "venvPath": ".",
+            "venv": "backend/venv"
+        },
+        {
+            "root": "./frontend",
+            "venvPath": ".",
+            "venv": "frontend/venv"
+        },
+        {
+            "root": "./ml",
+            "venvPath": ".",
+            "venv": "ml/venv"
+        }
+    ],
+    "extraPaths": [
+        "./backend",
+        "./ml",
+        "./frontend"
+    ]
+}

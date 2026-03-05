@@ -2,319 +2,132 @@ def apply_styles():
     import streamlit as st
     st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background-color: #0f1117;
+    color: #e0e0e0;
 }
 
 .stApp {
-    background: #0d0f14;
-    color: #e8eaf0;
+    background-color: #0f1117;
+}
+
+header, footer, #MainMenu {
+    visibility: hidden;
 }
 
 section[data-testid="stSidebar"] {
-    background: #13161e !important;
-    border-right: 1px solid #1e2130;
-}
-
-section[data-testid="stSidebar"] .stButton > button {
-    background: transparent;
-    border: none;
-    color: #9aa3b8;
-    text-align: left;
-    width: 100%;
-    padding: 0.6rem 1rem;
-    border-radius: 8px;
-    font-size: 0.88rem;
-    font-weight: 500;
-    transition: all 0.2s ease;
-    margin: 1px 0;
-}
-
-section[data-testid="stSidebar"] .stButton > button:hover {
-    background: rgba(99, 102, 241, 0.12);
-    color: #c4c9dc;
+    background-color: #1a1d27 !important;
+    border-right: 1px solid #2a2d3a;
 }
 
 .stButton > button {
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    color: white;
+    background-color: #2563eb;
+    color: #ffffff;
     border: none;
-    border-radius: 8px;
-    padding: 0.55rem 1.4rem;
+    border-radius: 6px;
+    padding: 0.5rem 1.2rem;
     font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
+    transition: background-color 0.15s ease;
 }
 
 .stButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.45);
-    background: linear-gradient(135deg, #7173f5, #9b6cf9);
+    background-color: #1d4ed8;
 }
 
-.stButton > button:active {
-    transform: translateY(0);
+.stButton > button:disabled {
+    background-color: #374151;
+    color: #6b7280;
+    cursor: not-allowed;
 }
 
 .stTextInput > div > div > input,
-.stTextArea > div > div > textarea,
-.stSelectbox > div > div > select {
-    background: #1a1d2e !important;
-    border: 1px solid #252840 !important;
-    border-radius: 8px !important;
-    color: #e8eaf0 !important;
+.stTextArea > div > div > textarea {
+    background-color: #1a1d27 !important;
+    border: 1px solid #2a2d3a !important;
+    border-radius: 6px !important;
+    color: #e0e0e0 !important;
     font-size: 0.9rem !important;
-    transition: border-color 0.2s !important;
 }
 
 .stTextInput > div > div > input:focus,
 .stTextArea > div > div > textarea:focus {
-    border-color: #6366f1 !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37,99,235,0.2) !important;
 }
 
 .stSelectbox > div > div {
-    background: #1a1d2e !important;
-    border: 1px solid #252840 !important;
-    border-radius: 8px !important;
+    background-color: #1a1d27 !important;
+    border: 1px solid #2a2d3a !important;
+    border-radius: 6px !important;
+    color: #e0e0e0 !important;
 }
 
 div[data-testid="stFileUploader"] {
-    border: 1.5px dashed #2e3352 !important;
-    border-radius: 12px !important;
-    background: #14172a !important;
-    transition: border-color 0.2s;
-}
-
-div[data-testid="stFileUploader"]:hover {
-    border-color: #6366f1 !important;
+    border: 1px dashed #2a2d3a !important;
+    border-radius: 6px !important;
+    background-color: #1a1d27 !important;
 }
 
 .stTabs [data-baseweb="tab-list"] {
-    background: #13161e;
-    border-radius: 10px;
-    padding: 4px;
-    gap: 2px;
-    border-bottom: none;
+    background: transparent;
+    border-bottom: 1px solid #2a2d3a;
+    gap: 0;
 }
 
 .stTabs [data-baseweb="tab"] {
     background: transparent;
     color: #6b7280;
-    border-radius: 7px;
-    font-size: 0.86rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    padding: 0.45rem 1.1rem;
+    padding: 0.5rem 1rem;
     border: none;
-    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
 }
 
 .stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
-    color: white !important;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+    color: #e0e0e0 !important;
+    border-bottom: 2px solid #2563eb !important;
+    background: transparent !important;
+    box-shadow: none !important;
 }
 
 .stExpander {
-    background: #13161e !important;
-    border: 1px solid #1e2130 !important;
-    border-radius: 10px !important;
-}
-
-.stat-card {
-    background: #13161e;
-    border: 1px solid #1e2130;
-    border-radius: 14px;
-    padding: 1.4rem;
-    text-align: center;
-    transition: all 0.25s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
-    border-radius: 14px 14px 0 0;
-}
-
-.stat-card:hover {
-    border-color: #2e3352;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-}
-
-.stat-number {
-    font-size: 2.4rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, #6366f1, #a78bfa);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    line-height: 1.1;
-    margin-bottom: 0.3rem;
-}
-
-.stat-label {
-    font-size: 0.8rem;
-    color: #6b7280;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.page-header {
-    margin-bottom: 1.8rem;
-}
-
-.page-header h1 {
-    font-size: 1.7rem;
-    font-weight: 700;
-    color: #f1f3f9;
-    margin: 0 0 0.3rem 0;
-}
-
-.page-header p {
-    color: #6b7280;
-    font-size: 0.9rem;
-    margin: 0;
-}
-
-.score-ring-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 1rem 0;
-}
-
-.score-ring {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    border: 6px solid;
-    position: relative;
-}
-
-.score-ring-value {
-    font-size: 2rem;
-    font-weight: 800;
-    line-height: 1;
-}
-
-.score-ring-label {
-    font-size: 0.65rem;
-    color: #9aa3b8;
-    font-weight: 500;
-    margin-top: 2px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.info-card {
-    background: #13161e;
-    border: 1px solid #1e2130;
-    border-radius: 12px;
-    padding: 1.2rem;
-    margin-bottom: 0.8rem;
-}
-
-.badge {
-    display: inline-block;
-    padding: 0.22rem 0.7rem;
-    border-radius: 20px;
-    font-size: 0.76rem;
-    font-weight: 600;
-    margin: 2px;
-}
-
-.badge-skill {
-    background: rgba(99, 102, 241, 0.15);
-    color: #a78bfa;
-    border: 1px solid rgba(99, 102, 241, 0.25);
-}
-
-.badge-missing {
-    background: rgba(239, 68, 68, 0.12);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.2);
-}
-
-.badge-matched {
-    background: rgba(34, 197, 94, 0.12);
-    color: #4ade80;
-    border: 1px solid rgba(34, 197, 94, 0.2);
-}
-
-.divider {
-    height: 1px;
-    background: #1e2130;
-    margin: 1.2rem 0;
+    background-color: #1a1d27 !important;
+    border: 1px solid #2a2d3a !important;
+    border-radius: 6px !important;
 }
 
 .stProgress > div > div > div {
-    background: linear-gradient(90deg, #6366f1, #8b5cf6) !important;
-    border-radius: 6px !important;
+    background: #2563eb !important;
+    border-radius: 2px !important;
 }
 
 .stProgress > div > div {
-    background: #1e2130 !important;
+    background: #2a2d3a !important;
+    border-radius: 2px !important;
+}
+
+.stAlert {
     border-radius: 6px !important;
 }
 
-.upload-hint {
-    font-size: 0.8rem;
-    color: #6b7280;
-    text-align: center;
-    margin-top: 0.4rem;
+h1, h2, h3, h4, h5, h6 {
+    color: #f0f0f0;
 }
 
-.match-row {
-    background: #13161e;
-    border: 1px solid #1e2130;
-    border-radius: 10px;
-    padding: 0.9rem 1.1rem;
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    transition: border-color 0.2s;
+hr {
+    border-color: #2a2d3a;
 }
 
-.match-row:hover {
-    border-color: #2e3352;
+.stRadio label, .stCheckbox label {
+    color: #c0c0c0 !important;
 }
 
-.empty-state {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: #6b7280;
-}
-
-.empty-state-icon {
-    font-size: 2.5rem;
-    margin-bottom: 0.8rem;
-    opacity: 0.5;
-}
-
-.empty-state h3 {
-    color: #9aa3b8;
-    font-weight: 600;
-    margin-bottom: 0.4rem;
-}
-
-.empty-state p {
-    font-size: 0.87rem;
+p, span, div {
+    color: inherit;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -322,58 +135,63 @@ div[data-testid="stFileUploader"]:hover {
 
 def score_color(score: float) -> str:
     if score >= 75:
-        return "#4ade80"
+        return "#22c55e"
     elif score >= 50:
-        return "#facc15"
+        return "#f59e0b"
     else:
-        return "#f87171"
+        return "#ef4444"
 
 
 def render_score_ring(score: float, label: str = "Score"):
     color = score_color(score)
     import streamlit as st
     st.markdown(f"""
-<div class="score-ring-container">
-  <div class="score-ring" style="border-color: {color}; background: rgba(0,0,0,0.2);">
-    <span class="score-ring-value" style="color: {color}">{int(score)}</span>
-    <span class="score-ring-label">{label}</span>
-  </div>
+<div style="text-align:center; padding:1rem 0;">
+  <div style="font-size:2.5rem; font-weight:700; color:{color};">{int(score)}</div>
+  <div style="font-size:0.8rem; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em;">{label}</div>
 </div>
 """, unsafe_allow_html=True)
 
 
 def render_badge(text: str, badge_type: str = "skill"):
     import streamlit as st
-    st.markdown(f'<span class="badge badge-{badge_type}">{text}</span>', unsafe_allow_html=True)
+    colors = {
+        "skill": ("#1e3a5f", "#93c5fd"),
+        "missing": ("#3f1f1f", "#f87171"),
+        "matched": ("#1a3a2a", "#4ade80"),
+    }
+    bg, fg = colors.get(badge_type, ("#1e3a5f", "#93c5fd"))
+    st.markdown(
+        f'<span style="display:inline-block;padding:0.15rem 0.6rem;border-radius:4px;'
+        f'font-size:0.78rem;font-weight:500;background:{bg};color:{fg};margin:2px;">'
+        f'{text}</span>',
+        unsafe_allow_html=True
+    )
 
 
 def render_stat_card(number, label: str):
     import streamlit as st
     st.markdown(f"""
-<div class="stat-card">
-  <div class="stat-number">{number}</div>
-  <div class="stat-label">{label}</div>
+<div style="border:1px solid #2a2d3a;border-radius:6px;padding:1.2rem;text-align:center;background:#1a1d27;">
+  <div style="font-size:2rem;font-weight:700;color:#f0f0f0;">{number}</div>
+  <div style="font-size:0.8rem;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-top:0.2rem;">{label}</div>
 </div>
 """, unsafe_allow_html=True)
 
 
 def render_page_header(title: str, subtitle: str = ""):
     import streamlit as st
-    sub_html = f"<p>{subtitle}</p>" if subtitle else ""
-    st.markdown(f"""
-<div class="page-header">
-  <h1>{title}</h1>
-  {sub_html}
-</div>
-""", unsafe_allow_html=True)
+    st.markdown(f"## {title}")
+    if subtitle:
+        st.markdown(f"<p style='color:#6b7280;margin-top:-0.5rem;font-size:0.9rem;'>{subtitle}</p>", unsafe_allow_html=True)
+    st.markdown("---")
 
 
-def render_empty_state(icon: str, title: str, body: str):
+def render_empty_state(icon, title: str, body: str):
     import streamlit as st
     st.markdown(f"""
-<div class="empty-state">
-  <div class="empty-state-icon">{icon}</div>
-  <h3>{title}</h3>
-  <p>{body}</p>
+<div style="text-align:center;padding:2rem 1rem;color:#6b7280;">
+  <div style="font-size:1rem;font-weight:600;color:#9ca3af;margin-bottom:0.4rem;">{title}</div>
+  <div style="font-size:0.875rem;">{body}</div>
 </div>
 """, unsafe_allow_html=True)

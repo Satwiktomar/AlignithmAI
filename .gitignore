@@ -3,7 +3,7 @@
 # ===========================
 skill.md
 skills.md
-
+DEPLOYMENT.md
 # ===========================
 # Python
 # ===========================
@@ -34,9 +34,9 @@ venv.bak/
 # Environment & secrets
 # ===========================
 .env
-.env.*
+.env.local
+.env.production
 !.env.example
-*.env
 
 # ===========================
 # Databases
@@ -99,11 +99,15 @@ embeddings/
 uploads/
 temp/
 tmp/
-*.pdf
-*.docx
 
 # ===========================
 # Node (if any)
 # ===========================
 node_modules/
 npm-debug.log*
+
+# ===========================
+# Agent & tooling
+# ===========================
+.agent/
+.gemini/

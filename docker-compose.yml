@@ -1,0 +1,60 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://rolefit:${DB_PASSWORD:-changeme-in-production}@db:5432/rolefit
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - ALLOWED_ORIGINS=http://localhost:8501,http://127.0.0.1:8501
+      - ML_SERVICE_URL=http://ml:8001
+      - ML_INTERNAL_KEY=${ML_INTERNAL_KEY:-dev-internal-key}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=mistral
+      - ENVIRONMENT=development
+    depends_on:
+      db:
+        condition: service_healthy
+      ml:
+        condition: service_started
+    restart: unless-stopped
+
+  ml:
+    build: ./ml
+    # ports:
+    #   - "8001:8001"  # Do NOT expose in production
+    environment:
+      - ALLOWED_ORIGINS=http://backend:8000,http://localhost:8000
+      - ML_INTERNAL_KEY=${ML_INTERNAL_KEY:-dev-internal-key}
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=rolefit
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-changeme-in-production}
+      - POSTGRES_DB=rolefit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U rolefit" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # ports:
+    #   - "5432:5432"  # Do NOT expose in production
+    restart: unless-stopped
+
+volumes:
+  pgdata:
