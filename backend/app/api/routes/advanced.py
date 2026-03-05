@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
+from app.limiter import limiter
 from app.models import Resume, JobDescription, MatchScore, Project, CoverLetter
 from app.api.routes.auth import get_current_user
 from app.models import User
+from app.services.auth import decrypt_api_key
 from app.services.gemini import generate_json, generate_text
-from app.prompts import SKILL_GAP_PROMPT, RECRUITER_SIM_PROMPT
+from app.services.ollama_service import get_ollama_status
+from app.prompts import SKILL_GAP_PROMPT, RECRUITER_SIM_PROMPT, ROADMAP_BUILDER_PROMPT
 import json
 import re
 from collections import Counter
@@ -16,7 +19,9 @@ router = APIRouter(prefix="/advanced", tags=["advanced"])
 
 
 @router.post("/skillgap")
+@limiter.limit("30/minute")
 async def get_skill_gap(
+    request: Request,
     resume_id: int,
     job_id: int,
     db: Session = Depends(get_db),
@@ -46,12 +51,14 @@ async def get_skill_gap(
         resume_skills=resume_skills,
         jd_skills=jd_skills
     )
-    result = await generate_json(prompt)
+    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
     return result
 
 
 @router.post("/recruiter-sim")
+@limiter.limit("30/minute")
 async def recruiter_simulation(
+    request: Request,
     resume_id: int,
     job_id: int,
     db: Session = Depends(get_db),
@@ -67,7 +74,7 @@ async def recruiter_simulation(
         resume_json=json.dumps(resume.parsed_json, indent=2)[:6000],
         jd_json=json.dumps(job.parsed_json, indent=2)[:4000]
     )
-    result = await generate_json(prompt)
+    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
     return result
 
 
@@ -121,7 +128,7 @@ class TextAnalysisRequest(BaseModel):
 
 
 @router.post("/tone-detect")
-def detect_ai_tone(req: TextAnalysisRequest):
+def detect_ai_tone(req: TextAnalysisRequest, current_user: User = Depends(get_current_user)):
     text_lower = req.text.lower()
     flagged_ai = [p for p in AI_TONE_PHRASES if p in text_lower]
     flagged_vague = [p for p in VAGUE_PHRASES if p in text_lower]
@@ -153,7 +160,7 @@ def detect_ai_tone(req: TextAnalysisRequest):
 
 
 @router.post("/bias-detect")
-def detect_bias_redundancy(req: TextAnalysisRequest):
+def detect_bias_redundancy(req: TextAnalysisRequest, current_user: User = Depends(get_current_user)):
     text = req.text
     sentences = [s.strip() for s in re.split(r'[.\n]', text) if len(s.strip()) > 15]
     seen = Counter()
@@ -194,7 +201,9 @@ class IndustryModeRequest(BaseModel):
 
 
 @router.post("/industry-mode")
+@limiter.limit("30/minute")
 async def industry_mode_calibration(
+    request: Request,
     req: IndustryModeRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -229,5 +238,105 @@ Return ONLY valid JSON:
   "overall_advice": ""
 }}
 """
-    result = await generate_json(prompt)
+    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
     return result
+
+
+@router.get("/ollama-status")
+async def ollama_status(current_user: User = Depends(get_current_user)):
+    return await get_ollama_status()
+
+
+class RoadmapRequest(BaseModel):
+    topic: str
+    context: str = "general"
+    force_new: bool = False
+
+
+@router.post("/roadmap-builder")
+@limiter.limit("20/minute")
+async def build_roadmap(
+    request: Request,
+    req: RoadmapRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not req.topic or len(req.topic.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Please provide a topic or job description.")
+
+    topic_key = re.sub(r'\s+', ' ', req.topic.strip().lower())[:500]
+
+    # Check cache first (unless force_new)
+    if not req.force_new:
+        from app.models import CachedRoadmap
+        cached = db.query(CachedRoadmap).filter(
+            CachedRoadmap.user_id == current_user.id,
+            CachedRoadmap.topic_key == topic_key
+        ).order_by(CachedRoadmap.created_at.desc()).first()
+        if cached:
+            return {"cached": True, "id": cached.id, **cached.result_json}
+
+    prompt = ROADMAP_BUILDER_PROMPT.format(
+        user_input=req.topic[:3000],
+        context=req.context[:500]
+    )
+    result = await generate_json(
+        prompt,
+        user_api_key=decrypt_api_key(current_user.gemini_api_key),
+        use_local_model=current_user.prefer_local_model
+    )
+
+    # Save to cache (only if generation succeeded)
+    if isinstance(result, dict) and not result.get("error"):
+        from app.models import CachedRoadmap
+        cached_entry = CachedRoadmap(
+            user_id=current_user.id,
+            topic_key=topic_key,
+            topic_display=req.topic.strip()[:500],
+            result_json=result,
+        )
+        db.add(cached_entry)
+        db.commit()
+        db.refresh(cached_entry)
+        result["cached"] = False
+        result["id"] = cached_entry.id
+
+    return result
+
+
+@router.get("/cached-roadmaps")
+def list_cached_roadmaps(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.models import CachedRoadmap
+    cached = db.query(CachedRoadmap).filter(
+        CachedRoadmap.user_id == current_user.id
+    ).order_by(CachedRoadmap.created_at.desc()).all()
+    return [
+        {
+            "id": c.id,
+            "topic": c.topic_display,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        }
+        for c in cached
+    ]
+
+
+@router.delete("/cached-roadmaps/{roadmap_id}")
+def delete_cached_roadmap(
+    roadmap_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.models import CachedRoadmap
+    cached = db.query(CachedRoadmap).filter(
+        CachedRoadmap.id == roadmap_id,
+        CachedRoadmap.user_id == current_user.id
+    ).first()
+    if not cached:
+        raise HTTPException(status_code=404, detail="Cached roadmap not found")
+    db.delete(cached)
+    db.commit()
+    return {"detail": "Cached roadmap deleted"}
+

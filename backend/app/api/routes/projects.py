@@ -5,6 +5,7 @@ from app.models import Project, JobDescription
 from app.schemas import ProjectCreate, ProjectUpdate, ProjectOut
 from app.api.routes.auth import get_current_user
 from app.models import User
+from app.services.auth import decrypt_api_key
 from app.services.gemini import generate_json
 from app.prompts import PROJECT_RANK_PROMPT
 import json
@@ -74,5 +75,5 @@ async def recommend_projects(
         projects_json=json.dumps(projects_data, indent=2),
         jd_json=json.dumps(job.parsed_json, indent=2)[:3000]
     )
-    result = await generate_json(prompt)
+    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key))
     return result
