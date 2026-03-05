@@ -5,13 +5,12 @@ Uses all-MiniLM-L6-v2 for semantic similarity with an in-memory
 hash-based cache to avoid re-encoding identical texts.
 """
 
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import hashlib
 import time
 import logging
-from functools import lru_cache
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -69,18 +68,35 @@ class EmbeddingCache:
         self._misses = 0
 
 
-# Global cache instance
-_cache = EmbeddingCache()
+# Global cache instance (lower max_entries to save memory on constrained hosts)
+_cache = EmbeddingCache(max_entries=500)
 
 
 # ── Model Loading ───────────────────────────────────────────────────────
 
-@lru_cache(maxsize=1)
-def get_model() -> SentenceTransformer:
-    logger.info(f"Loading embedding model: {MODEL_NAME}")
-    model = SentenceTransformer(MODEL_NAME)
-    logger.info(f"Model loaded: {MODEL_NAME} (dim={model.get_sentence_embedding_dimension()})")
-    return model
+_model = None
+_model_lock = threading.Lock()
+
+
+def get_model():
+    """Lazy-load the SentenceTransformer model on first use (thread-safe).
+
+    The import is deferred so that the sentence_transformers library
+    (and PyTorch/ONNX) are NOT loaded at application startup time.
+    This keeps the cold-start memory footprint under ~80 MB, which is
+    critical for Render free tier (512 MB limit).
+    """
+    global _model
+    if _model is not None:
+        return _model
+    with _model_lock:
+        if _model is not None:
+            return _model  # another thread loaded while we waited
+        from sentence_transformers import SentenceTransformer  # lazy import
+        logger.info(f"Loading embedding model: {MODEL_NAME}")
+        _model = SentenceTransformer(MODEL_NAME)
+        logger.info(f"Model loaded: {MODEL_NAME} (dim={_model.get_sentence_embedding_dimension()})")
+        return _model
 
 
 def warmup_model() -> dict:

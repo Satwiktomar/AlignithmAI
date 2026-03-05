@@ -67,21 +67,14 @@ app.include_router(ats.router)
 app.include_router(taxonomy.router)
 
 
-# ── Model pre-warming at startup ────────────────────────────────────────
+# ── Model status (lazy — NOT loaded at startup) ────────────────────────
 
-_model_status = {"status": "loading"}
+_model_status = {"status": "not_loaded"}
 
 
 @app.on_event("startup")
 async def startup_event():
-    global _model_status
-    logger.info("Pre-warming embedding model...")
-    try:
-        _model_status = warmup_model()
-        logger.info(f"Model ready: {_model_status}")
-    except Exception as e:
-        _model_status = {"status": "error", "error": str(e)}
-        logger.error(f"Model warmup failed: {e}")
+    logger.info("ML Service started (model will load on first request)")
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────
@@ -98,6 +91,18 @@ def health():
         "model": _model_status,
         "cache": get_cache_stats(),
     }
+
+
+@app.post("/warmup")
+def warmup():
+    """Optional endpoint: call AFTER the service is healthy to pre-load the model."""
+    global _model_status
+    try:
+        _model_status = warmup_model()
+        return _model_status
+    except Exception as e:
+        _model_status = {"status": "error", "error": str(e)}
+        return _model_status
 
 
 @app.get("/cache-stats")
