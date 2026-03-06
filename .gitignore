@@ -79,7 +79,8 @@ htmlcov/
 *.pth
 *.bin
 *.safetensors
-models/
+/models/
+!backend/app/models/
 embeddings/
 *.pkl
 *.pickle
