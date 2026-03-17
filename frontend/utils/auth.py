@@ -47,7 +47,7 @@ html, body, [class*="css"] { font-family: 'Segoe UI', system-ui, sans-serif; bac
 .stApp { background-color: #0f1117; }
 header, footer, #MainMenu { visibility: hidden; }
 .stTextInput > div > div > input { background-color: #1a1d27 !important; border: 1px solid #2a2d3a !important; color: #e0e0e0 !important; border-radius: 6px !important; }
-.stButton > button { background-color: #2563eb !important; color: #fff !important; border: none !important; border-radius: 6px !important; font-weight: 500 !important; }
+.stButton > button, .stFormSubmitButton > button { background-color: #2563eb !important; color: #fff !important; border: none !important; border-radius: 6px !important; font-weight: 500 !important; }
 h2 { color: #f0f0f0; }
 p { color: #9ca3af; }
 hr { border-color: #2a2d3a; }
@@ -75,20 +75,25 @@ hr { border-color: #2a2d3a; }
 
     if st.session_state["auth_mode"] == "login":
         st.markdown("##### Sign In")
-        login_email = st.text_input("Email", key="li_email")
-        login_pass = st.text_input("Password", type="password", key="li_pass")
-        if st.button("Sign In", use_container_width=True, key="do_login"):
+        with st.form("login_form"):
+            login_email = st.text_input("Email", key="li_email")
+            login_pass = st.text_input("Password", type="password", key="li_pass")
+            submitted = st.form_submit_button("Sign In", use_container_width=True)
+
+        if submitted:
             if not login_email or not login_pass:
                 st.error("Enter email and password.")
             else:
                 with st.spinner("Signing in..."):
                     r = api("POST", "/auth/login", json={"email": login_email, "password": login_pass})
-                if r and r.status_code == 200:
+                if r is None:
+                    pass  # error already shown by api()
+                elif r.status_code == 200:
                     data = r.json()
                     st.session_state["token"] = data["access_token"]
                     st.session_state["user"] = data["user"]
                     st.rerun()
-                elif r:
+                else:
                     try:
                         st.error(r.json().get("detail", "Login failed."))
                     except Exception:
@@ -96,10 +101,13 @@ hr { border-color: #2a2d3a; }
 
     else:
         st.markdown("##### Create Account")
-        reg_name = st.text_input("Full Name", key="re_name")
-        reg_email = st.text_input("Email", key="re_email")
-        reg_pass = st.text_input("Password", type="password", key="re_pass")
-        if st.button("Create Account", use_container_width=True, key="do_register"):
+        with st.form("register_form"):
+            reg_name = st.text_input("Full Name", key="re_name")
+            reg_email = st.text_input("Email", key="re_email")
+            reg_pass = st.text_input("Password", type="password", key="re_pass")
+            submitted = st.form_submit_button("Create Account", use_container_width=True)
+
+        if submitted:
             if not reg_name or not reg_email or not reg_pass:
                 st.error("Fill all fields.")
             elif len(reg_pass) < 8:
@@ -111,13 +119,15 @@ hr { border-color: #2a2d3a; }
                         "email": reg_email,
                         "password": reg_pass
                     })
-                if r and r.status_code == 200:
+                if r is None:
+                    pass  # error already shown by api()
+                elif r.status_code == 200:
                     data = r.json()
                     st.session_state["token"] = data["access_token"]
                     st.session_state["user"] = data["user"]
                     st.rerun()
-                elif r:
+                else:
                     try:
                         st.error(r.json().get("detail", "Registration failed."))
                     except Exception:
-                        st.error(f"Registration failed (HTTP {r.status_code}).")
+                        st.error(f"Registration failed (HTTP {r.status_code}).")
