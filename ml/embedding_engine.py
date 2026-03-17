@@ -1,31 +1,50 @@
 """
-Embedding Engine — Sentence-Transformer embeddings with caching.
+Embedding Engine — Gemini text-embedding-004 with in-memory caching.
 
-Uses all-MiniLM-L6-v2 for semantic similarity with an in-memory
-hash-based cache to avoid re-encoding identical texts.
+Uses Google Gemini embedding API for semantic similarity with an
+in-memory hash-based cache to avoid redundant API calls.
 """
 
 import os
-os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-os.environ.setdefault("HF_HOME", os.path.join(os.path.dirname(__file__), ".hf_cache"))
-
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 import hashlib
 import time
 import logging
-import threading
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "text-embedding-004"
+
+
+# ── Gemini Client ───────────────────────────────────────────────────────
+
+_client = None
+
+
+def _get_client():
+    """Lazy-init the genai client."""
+    global _client
+    if _client is not None:
+        return _client
+    from google import genai
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY environment variable is not set")
+    _client = genai.Client(api_key=api_key)
+    logger.info(f"Gemini embedding client initialized (model={EMBEDDING_MODEL})")
+    return _client
+
 
 # ── Embedding Cache ─────────────────────────────────────────────────────
 
 class EmbeddingCache:
     """In-memory embedding cache with TTL (default 1 hour)."""
 
-    def __init__(self, ttl_seconds: int = 3600, max_entries: int = 5000):
+    def __init__(self, ttl_seconds: int = 3600, max_entries: int = 500):
         self._cache: dict[str, tuple[np.ndarray, float]] = {}
         self._ttl = ttl_seconds
         self._max_entries = max_entries
@@ -51,7 +70,6 @@ class EmbeddingCache:
 
     def put(self, text: str, vec: np.ndarray) -> None:
         if len(self._cache) >= self._max_entries:
-            # Evict oldest 10%
             sorted_keys = sorted(self._cache, key=lambda k: self._cache[k][1])
             for k in sorted_keys[:len(sorted_keys) // 10]:
                 del self._cache[k]
@@ -72,53 +90,23 @@ class EmbeddingCache:
         self._misses = 0
 
 
-# Global cache instance (lower max_entries to save memory on constrained hosts)
 _cache = EmbeddingCache(max_entries=500)
 
 
-# ── Model Loading ───────────────────────────────────────────────────────
+# ── Core Embedding Function ────────────────────────────────────────────
 
-_model = None
-_model_lock = threading.Lock()
+def _embed_single(text: str) -> np.ndarray:
+    """Call Gemini embed_content for a single text."""
+    client = _get_client()
+    response = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
+    )
+    return np.array(response.embeddings[0].values, dtype=np.float32)
 
-
-def get_model():
-    """Lazy-load the SentenceTransformer model on first use (thread-safe).
-
-    The import is deferred so that the sentence_transformers library
-    (and PyTorch/ONNX) are NOT loaded at application startup time.
-    This keeps the cold-start memory footprint under ~80 MB, which is
-    critical for Render free tier (512 MB limit).
-    """
-    global _model
-    if _model is not None:
-        return _model
-    with _model_lock:
-        if _model is not None:
-            return _model  # another thread loaded while we waited
-        from sentence_transformers import SentenceTransformer  # lazy import
-        logger.info(f"Loading embedding model: {MODEL_NAME}")
-        _model = SentenceTransformer(MODEL_NAME)
-        logger.info(f"Model loaded: {MODEL_NAME} (dim={_model.get_sentence_embedding_dimension()})")
-        return _model
-
-
-def warmup_model() -> dict:
-    """Pre-warm the model by encoding a test sentence. Call at startup."""
-    model = get_model()
-    _ = model.encode(["warmup"], normalize_embeddings=True)
-    return {
-        "model": MODEL_NAME,
-        "dimension": model.get_sentence_embedding_dimension(),
-        "status": "ready",
-    }
-
-
-# ── Core Functions ──────────────────────────────────────────────────────
 
 def embed_texts(texts: list[str]) -> np.ndarray:
-    """Encode texts with cache-first lookup. Only encodes cache misses."""
-    model = get_model()
+    """Encode texts with cache-first lookup. Only calls API for cache misses."""
     results = [None] * len(texts)
     to_encode_indices = []
     to_encode_texts = []
@@ -132,13 +120,15 @@ def embed_texts(texts: list[str]) -> np.ndarray:
             to_encode_texts.append(text)
 
     if to_encode_texts:
-        new_vecs = model.encode(to_encode_texts, normalize_embeddings=True)
-        for idx, text, vec in zip(to_encode_indices, to_encode_texts, new_vecs):
+        for idx, text in zip(to_encode_indices, to_encode_texts):
+            vec = _embed_single(text)
             _cache.put(text, vec)
             results[idx] = vec
 
     return np.array(results)
 
+
+# ── Similarity Functions ────────────────────────────────────────────────
 
 def cosine_sim(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
     return float(cosine_similarity(vec_a.reshape(1, -1), vec_b.reshape(1, -1))[0][0])
@@ -156,8 +146,6 @@ def batch_similarity(query: str, candidates: list[str]) -> list[float]:
     vecs = embed_texts(all_texts)
     query_vec = vecs[0:1]
     candidate_vecs = vecs[1:]
-
-    # Vectorized cosine similarity
     sims = cosine_similarity(query_vec, candidate_vecs)[0]
     return [float(sc) for sc in sims]
 

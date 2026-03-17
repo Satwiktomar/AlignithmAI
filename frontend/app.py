@@ -89,7 +89,8 @@ with st.sidebar:
             st.session_state["user"]["prefer_local_model"] = use_local
             st.rerun()
 
-    mode_label = "Local AI (Ollama)" if use_local else "Cloud AI (Gemini)"
+    provider_name = user.get("ai_provider", "gemini").upper()
+    mode_label = "Local AI (Ollama)" if use_local else f"Cloud AI ({provider_name})"
     st.markdown(
         f"<div style='font-size:0.72rem;color:#6b7280;margin:-0.25rem 0 0.5rem;'>{mode_label}</div>",
         unsafe_allow_html=True
@@ -106,12 +107,21 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-if not user.get("has_api_key", False):
-    st.warning(
-        "No Gemini API key configured — AI features won't work. "
-        "Go to **Settings** → **API Key** to add yours (free at [aistudio.google.com](https://aistudio.google.com)).",
-        icon="⚠️"
-    )
+if not user.get("has_api_key", False) and not user.get("prefer_local_model", False):
+    provider = user.get("ai_provider", "gemini")
+    if provider == "openai":
+        st.warning(
+            "No OpenAI API key configured — AI features won't work. "
+            "Go to **Settings** → **API Keys** to add yours.",
+            icon="⚠️"
+        )
+    else:
+        st.warning(
+            "No Gemini API key configured — AI features won't work. "
+            "Go to **Settings** → **API Keys** to add yours (free at [aistudio.google.com](https://aistudio.google.com)), "
+            "or switch to OpenAI in Settings.",
+            icon="⚠️"
+        )
 
 page = st.session_state["page"]
 

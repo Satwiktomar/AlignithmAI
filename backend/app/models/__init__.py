@@ -12,6 +12,8 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     gemini_api_key = Column(String(500), nullable=True)
+    openai_api_key = Column(String(500), nullable=True)
+    ai_provider = Column(String(20), default="gemini")
     prefer_local_model = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -24,7 +26,13 @@ class User(Base):
 
     @property
     def has_api_key(self) -> bool:
+        if self.ai_provider == "openai":
+            return bool(self.openai_api_key)
         return bool(self.gemini_api_key)
+
+    @property
+    def has_openai_key(self) -> bool:
+        return bool(self.openai_api_key)
 
 
 class Project(Base):
@@ -53,6 +61,7 @@ class Resume(Base):
     original_filename = Column(String(255))
     raw_text = Column(Text)
     parsed_json = Column(JSON)
+    embedding = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="resumes")
@@ -83,6 +92,7 @@ class JobDescription(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     raw_text = Column(Text)
     parsed_json = Column(JSON)
+    embedding = Column(JSON, nullable=True)
     source_url = Column(String(500))
     company_name = Column(String(200))
     job_title = Column(String(200))

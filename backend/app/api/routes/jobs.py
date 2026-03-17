@@ -6,9 +6,11 @@ from app.schemas import JobDescriptionCreate, JobDescriptionOut
 from app.api.routes.auth import get_current_user
 from app.models import User
 from app.services.scraper import scrape_job_url
-from app.services.auth import decrypt_api_key
-from app.services.gemini import generate_json
+from app.services.gemini import generate_json, embed_text, get_ai_config
 from app.prompts import JD_PARSE_PROMPT
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -45,12 +47,22 @@ async def parse_job(
         raise HTTPException(status_code=400, detail="No job description text provided")
 
     prompt = JD_PARSE_PROMPT.format(jd_text=raw_text[:6000])
-    parsed = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    parsed = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
+
+    # Generate embedding once and store for reuse
+    job_embedding = None
+    try:
+        if api_key:
+            job_embedding = embed_text(raw_text, user_api_key=api_key, provider=provider)
+    except Exception as e:
+        logger.warning(f"Failed to generate job embedding: {e}")
 
     job = JobDescription(
         user_id=current_user.id,
         raw_text=raw_text,
         parsed_json=parsed,
+        embedding=job_embedding,
         source_url=job_data.source_url,
         company_name=job_data.company_name or parsed.get("company", ""),
         job_title=job_data.job_title or parsed.get("job_title", "")

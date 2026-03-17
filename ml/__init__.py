@@ -1,6 +1,6 @@
 from embedding_engine import (
     embed_texts, semantic_similarity, batch_similarity,
-    rank_projects_by_jd, get_cache_stats, clear_cache, warmup_model,
+    rank_projects_by_jd, get_cache_stats, clear_cache,
 )
 from ats_scorer import (
     compute_ats_score, compute_enhanced_ats_score,
@@ -19,7 +19,7 @@ from action_verb_analyzer import analyze_bullets, get_strong_verb_suggestions
 __all__ = [
     # Embedding
     "embed_texts", "semantic_similarity", "batch_similarity",
-    "rank_projects_by_jd", "get_cache_stats", "clear_cache", "warmup_model",
+    "rank_projects_by_jd", "get_cache_stats", "clear_cache",
     # ATS
     "compute_ats_score", "compute_enhanced_ats_score",
     "detect_ats_issues", "detect_redundancy",

@@ -28,6 +28,8 @@ class UserOut(BaseModel):
     name: str
     email: str
     has_api_key: bool = False
+    has_openai_key: bool = False
+    ai_provider: str = "gemini"
     prefer_local_model: bool = False
     created_at: datetime
 
@@ -38,6 +40,8 @@ class UserOut(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     gemini_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    ai_provider: Optional[str] = None
     prefer_local_model: Optional[bool] = None
 
 

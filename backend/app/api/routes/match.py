@@ -5,8 +5,7 @@ from app.models import Resume, JobDescription, MatchScore
 from app.schemas import MatchScoreOut
 from app.api.routes.auth import get_current_user
 from app.models import User
-from app.services.auth import decrypt_api_key
-from app.services.gemini import generate_json
+from app.services.gemini import generate_json, get_ai_config
 from app.prompts import MATCH_ENGINE_PROMPT, RESUME_SUGGEST_PROMPT
 import json
 
@@ -32,7 +31,8 @@ async def run_match(
         resume_json=json.dumps(resume.parsed_json, indent=2)[:4000],
         jd_json=json.dumps(job.parsed_json, indent=2)[:4000]
     )
-    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    result = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
 
     ms = MatchScore(
         user_id=current_user.id,
@@ -81,7 +81,8 @@ async def get_suggestions(
         resume_json=json.dumps(resume.parsed_json, indent=2)[:4000],
         jd_keywords=json.dumps(jd_keywords)
     )
-    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    result = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
     return result
 
 
@@ -128,7 +129,8 @@ async def run_enhanced_match(
         resume_json=json.dumps(resume.parsed_json, indent=2)[:4000],
         jd_json=json.dumps(job.parsed_json, indent=2)[:4000]
     )
-    ai_result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    ai_result = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
 
     # 3. Merge: use ML scores where available, AI for qualitative
     combined = {
@@ -198,7 +200,8 @@ async def ats_audit(
         resume_text=(resume.raw_text or "")[:8000],
         jd_keywords=json.dumps(all_keywords[:30])
     )
-    ai_result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    ai_result = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
 
     return {
         "ml_audit": ml_result,

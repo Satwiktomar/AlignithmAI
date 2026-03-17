@@ -3,6 +3,7 @@ import os
 import json
 import re
 import asyncio
+import hashlib
 import logging
 from dotenv import load_dotenv
 from fastapi import HTTPException
@@ -25,6 +26,46 @@ def _get_client(user_api_key: str = None) -> genai.Client:
             detail="No Gemini API key configured. Go to Settings and add your API key to use AI features."
         )
     return genai.Client(api_key=user_api_key)
+
+
+EMBEDDING_MODEL = "text-embedding-004"
+
+
+# ── Provider-aware helpers ──────────────────────────────────────────────────
+
+def get_ai_config(user) -> tuple[str | None, str]:
+    """Return (decrypted_api_key, provider) based on the user's settings.
+
+    Centralises the key-decryption + provider lookup so every route can
+    call ``key, provider = get_ai_config(current_user)`` instead of
+    manually decrypting and passing the provider string.
+    """
+    from app.services.auth import decrypt_api_key
+
+    provider = getattr(user, "ai_provider", "gemini") or "gemini"
+    if provider == "openai":
+        return decrypt_api_key(getattr(user, "openai_api_key", None)), "openai"
+    return decrypt_api_key(getattr(user, "gemini_api_key", None)), "gemini"
+
+
+# ── Embeddings ──────────────────────────────────────────────────────────────
+
+def embed_text(text: str, user_api_key: str = None, provider: str = "gemini") -> list[float]:
+    """Generate embedding for a text.
+
+    Dispatches to Gemini or OpenAI based on *provider*.
+    Returns the embedding vector as a plain Python list of floats.
+    """
+    if provider == "openai":
+        from app.services.openai_service import embed_text_openai
+        return embed_text_openai(text, api_key=user_api_key)
+
+    client = _get_client(user_api_key)
+    response = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text[:8000],  # guard against overly long input
+    )
+    return list(response.embeddings[0].values)
 
 
 def extract_json(text: str) -> dict | list:
@@ -100,10 +141,44 @@ async def _try_local_fallback(prompt: str) -> str:
         raise HTTPException(status_code=500, detail=f"Local model error: {str(local_err)}")
 
 
-async def generate(prompt: str, user_api_key: str = None, use_local_model: bool = False) -> str:
+async def generate(
+    prompt: str,
+    user_api_key: str = None,
+    use_local_model: bool = False,
+    provider: str = "gemini",
+    use_cache: bool = False,
+    cache_user_id: int = None,
+    cache_db=None,
+) -> str:
+    # ── Prompt-level cache lookup ────────────────────────────────────
+    if use_cache and cache_db is not None and cache_user_id is not None:
+        cache_key = hashlib.sha256(prompt.encode()).hexdigest()
+        from app.models import CachedRoadmap
+        cached = cache_db.query(CachedRoadmap).filter(
+            CachedRoadmap.user_id == cache_user_id,
+            CachedRoadmap.topic_key == cache_key,
+        ).first()
+        if cached:
+            logger.info(f"Prompt cache HIT (key={cache_key[:12]}…)")
+            return json.dumps(cached.result_json) if isinstance(cached.result_json, (dict, list)) else str(cached.result_json)
+
     if use_local_model:
         return await _try_local_fallback(prompt)
 
+    # ── OpenAI provider path ─────────────────────────────────────────
+    if provider == "openai":
+        if not user_api_key:
+            if await is_ollama_available():
+                logger.info("No OpenAI key — falling back to local Ollama model")
+                return await _try_local_fallback(prompt)
+            raise HTTPException(
+                status_code=400,
+                detail="No OpenAI API key configured. Go to Settings and add your API key, or enable Local AI.",
+            )
+        from app.services.openai_service import generate_openai
+        return await generate_openai(prompt, api_key=user_api_key)
+
+    # ── Gemini provider path (default) ───────────────────────────────
     if not user_api_key:
         if await is_ollama_available():
             logger.info("No API key — falling back to local Ollama model")
@@ -131,15 +206,71 @@ async def generate(prompt: str, user_api_key: str = None, use_local_model: bool 
             except Exception:
                 raise HTTPException(
                     status_code=429,
-                    detail="Gemini API quota exceeded and local AI is unavailable. Please wait and try again."
+                    detail=(
+                        "Gemini API quota exceeded on both models and local AI is unavailable. "
+                        "Note: Multiple API keys from the same Google Cloud project share the "
+                        "same quota — a different key won't help. "
+                        "Try adding an OpenAI key in Settings as an alternative provider, "
+                        "or wait a few minutes and try again."
+                    ),
                 )
         raise HTTPException(status_code=500, detail=f"Gemini error: {str(e)}")
 
 
-async def generate_json(prompt: str, user_api_key: str = None, use_local_model: bool = False) -> dict | list:
-    text = await generate(prompt, user_api_key, use_local_model)
+async def generate_cached(
+    prompt: str,
+    user_api_key: str = None,
+    use_local_model: bool = False,
+    provider: str = "gemini",
+    cache_user_id: int = None,
+    cache_db=None,
+) -> str:
+    """generate() with prompt caching enabled. Stores successful results."""
+    cache_key = hashlib.sha256(prompt.encode()).hexdigest()
+
+    # Check cache first
+    if cache_db is not None and cache_user_id is not None:
+        from app.models import CachedRoadmap
+        cached = cache_db.query(CachedRoadmap).filter(
+            CachedRoadmap.user_id == cache_user_id,
+            CachedRoadmap.topic_key == cache_key,
+        ).first()
+        if cached:
+            logger.info(f"Prompt cache HIT (key={cache_key[:12]}…)")
+            return json.dumps(cached.result_json) if isinstance(cached.result_json, (dict, list)) else str(cached.result_json)
+
+    # Call AI normally
+    result_text = await generate(prompt, user_api_key=user_api_key, use_local_model=use_local_model, provider=provider)
+
+    # Store in cache
+    if cache_db is not None and cache_user_id is not None:
+        try:
+            from app.models import CachedRoadmap
+            parsed = extract_json(result_text)
+            if isinstance(parsed, (dict, list)) and not (isinstance(parsed, dict) and parsed.get("error")):
+                entry = CachedRoadmap(
+                    user_id=cache_user_id,
+                    topic_key=cache_key,
+                    topic_display=f"cached_prompt_{cache_key[:16]}",
+                    result_json=parsed,
+                )
+                cache_db.add(entry)
+                cache_db.commit()
+                logger.info(f"Prompt cache STORE (key={cache_key[:12]}…)")
+        except Exception as e:
+            logger.warning(f"Failed to cache prompt result: {e}")
+
+    return result_text
+
+
+async def generate_json(
+    prompt: str,
+    user_api_key: str = None,
+    use_local_model: bool = False,
+    provider: str = "gemini",
+) -> dict | list:
+    text = await generate(prompt, user_api_key, use_local_model, provider=provider)
     return extract_json(text)
 
 
 generate_text = generate
-

@@ -8,11 +8,13 @@ from app.schemas import ResumeOut, ResumeVersionOut, ResumeVersionCreate
 from app.api.routes.auth import get_current_user
 from app.models import User
 from app.services.parser import extract_text
-from app.services.auth import decrypt_api_key
-from app.services.gemini import generate_json
+from app.services.gemini import generate_json, embed_text, get_ai_config
 from app.prompts import RESUME_PARSE_PROMPT
 import json
+import logging
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/resume", tags=["resume"])
 
@@ -55,13 +57,23 @@ async def upload_resume(
         current_date=date.today().strftime("%B %d, %Y"),
         resume_text=raw_text[:12000]
     )
-    parsed = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    parsed = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
+
+    # Generate embedding once and store for reuse
+    resume_embedding = None
+    try:
+        if api_key:
+            resume_embedding = embed_text(raw_text, user_api_key=api_key, provider=provider)
+    except Exception as e:
+        logger.warning(f"Failed to generate resume embedding: {e}")
 
     resume = Resume(
         user_id=current_user.id,
         original_filename=file.filename,
         raw_text=raw_text,
-        parsed_json=parsed
+        parsed_json=parsed,
+        embedding=resume_embedding
     )
     db.add(resume)
     db.commit()

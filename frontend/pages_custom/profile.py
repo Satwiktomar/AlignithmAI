@@ -12,7 +12,7 @@ def render():
         return
     user_data = r.json()
 
-    tab_profile, tab_api, tab_danger = st.tabs(["Profile", "API Key", "Danger Zone"])
+    tab_profile, tab_api, tab_danger = st.tabs(["Profile", "API Keys", "Danger Zone"])
 
     with tab_profile:
         st.markdown(f"**Name:** {user_data.get('name', '')}")
@@ -30,45 +30,107 @@ def render():
                     st.error("Failed to update name.")
 
     with tab_api:
-        st.markdown("#### Gemini API Key")
+        st.markdown("#### AI Provider")
 
-        has_key = user_data.get("has_api_key", False)
-        if has_key:
-            st.success("An API key is configured. All AI features are active.")
+        current_provider = user_data.get("ai_provider", "gemini")
+        provider = st.radio(
+            "Choose your AI provider",
+            options=["gemini", "openai"],
+            index=0 if current_provider == "gemini" else 1,
+            format_func=lambda x: "Google Gemini (free tier available)" if x == "gemini" else "OpenAI (requires paid key)",
+            horizontal=True,
+            key="provider_radio",
+        )
+
+        # Save provider change immediately
+        if provider != current_provider:
+            r_prov = api("PUT", "/auth/me", json={"ai_provider": provider})
+            if r_prov and r_prov.ok:
+                st.success(f"Switched to **{provider.upper()}** provider.")
+                st.rerun()
+
+        st.divider()
+
+        # ── Gemini key section ──────────────────────────────────────────
+        st.markdown("#### Gemini API Key")
+        has_gemini = user_data.get("has_api_key", False) if current_provider == "gemini" else bool(user_data.get("has_api_key", False))
+        # Recalculate: has_api_key depends on active provider in the model,
+        # so check the raw field via a different indicator
+        gemini_configured = user_data.get("has_api_key", False) if current_provider == "gemini" else False
+        # Use a simple heuristic: if provider is gemini and has_api_key is true
+        if current_provider == "gemini" and user_data.get("has_api_key", False):
+            st.success("✅ Gemini key is configured and active.")
+        elif current_provider != "gemini" and user_data.get("has_api_key", False):
+            # Provider is openai but gemini key might still exist
+            st.info("Gemini key is saved but **OpenAI** is your active provider.")
         else:
-            st.warning(
-                "No API key configured. AI features (resume parsing, match scoring, "
-                "cover letters, skill gap, recruiter sim) will not work until you add a key."
-            )
+            st.warning("No Gemini API key configured.")
 
         st.markdown(
             "Get a free key at [aistudio.google.com](https://aistudio.google.com). "
-            "Your key is encrypted with AES-256 (Fernet) before being stored. "
-            "It is never logged or returned in any API response."
+            "Your key is encrypted with AES-256 (Fernet) before storage."
         )
-
-        new_key = st.text_input(
+        new_gemini_key = st.text_input(
             "Enter Gemini API Key",
             type="password",
-            placeholder="Enter your API Key",
-            label_visibility="visible"
+            placeholder="AIza...",
+            key="gemini_key_input",
         )
-
-        col_save, col_remove = st.columns(2)
-        with col_save:
-            if st.button("Save Key", use_container_width=True, disabled=not new_key):
-                r_update = api("PUT", "/auth/me", json={"gemini_api_key": new_key})
+        col_gsave, col_gremove = st.columns(2)
+        with col_gsave:
+            if st.button("Save Gemini Key", use_container_width=True, disabled=not new_gemini_key):
+                r_update = api("PUT", "/auth/me", json={"gemini_api_key": new_gemini_key})
                 if r_update and r_update.ok:
-                    st.success("API key saved and encrypted.")
+                    st.success("Gemini API key saved and encrypted.")
                     st.rerun()
                 else:
-                    st.error("Failed to save API key.")
-        with col_remove:
-            if has_key:
-                if st.button("Remove Key", use_container_width=True):
-                    r_update = api("PUT", "/auth/me", json={"gemini_api_key": ""})
+                    st.error("Failed to save Gemini key.")
+        with col_gremove:
+            if st.button("Remove Gemini Key", use_container_width=True):
+                r_update = api("PUT", "/auth/me", json={"gemini_api_key": ""})
+                if r_update and r_update.ok:
+                    st.success("Gemini key removed.")
+                    st.rerun()
+                else:
+                    st.error("Failed to remove key.")
+
+        st.divider()
+
+        # ── OpenAI key section ──────────────────────────────────────────
+        st.markdown("#### OpenAI API Key")
+        has_openai = user_data.get("has_openai_key", False)
+        if current_provider == "openai" and has_openai:
+            st.success("✅ OpenAI key is configured and active.")
+        elif current_provider != "openai" and has_openai:
+            st.info("OpenAI key is saved but **Gemini** is your active provider.")
+        else:
+            st.warning("No OpenAI API key configured.")
+
+        st.markdown(
+            "Get a key at [platform.openai.com](https://platform.openai.com/api-keys). "
+            "Your key is encrypted with AES-256 (Fernet) before storage."
+        )
+        new_openai_key = st.text_input(
+            "Enter OpenAI API Key",
+            type="password",
+            placeholder="sk-...",
+            key="openai_key_input",
+        )
+        col_osave, col_oremove = st.columns(2)
+        with col_osave:
+            if st.button("Save OpenAI Key", use_container_width=True, disabled=not new_openai_key):
+                r_update = api("PUT", "/auth/me", json={"openai_api_key": new_openai_key})
+                if r_update and r_update.ok:
+                    st.success("OpenAI API key saved and encrypted.")
+                    st.rerun()
+                else:
+                    st.error("Failed to save OpenAI key.")
+        with col_oremove:
+            if has_openai:
+                if st.button("Remove OpenAI Key", use_container_width=True):
+                    r_update = api("PUT", "/auth/me", json={"openai_api_key": ""})
                     if r_update and r_update.ok:
-                        st.success("API key removed.")
+                        st.success("OpenAI key removed.")
                         st.rerun()
                     else:
                         st.error("Failed to remove key.")

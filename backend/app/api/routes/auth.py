@@ -57,6 +57,14 @@ def update_me(update_data: UserUpdate, db: Session = Depends(get_db), current_us
             current_user.gemini_api_key = encrypt_api_key(update_data.gemini_api_key.strip())
         else:
             current_user.gemini_api_key = None
+    if update_data.openai_api_key is not None:
+        if update_data.openai_api_key.strip():
+            current_user.openai_api_key = encrypt_api_key(update_data.openai_api_key.strip())
+        else:
+            current_user.openai_api_key = None
+    if update_data.ai_provider is not None:
+        if update_data.ai_provider in ("gemini", "openai"):
+            current_user.ai_provider = update_data.ai_provider
     if update_data.prefer_local_model is not None:
         current_user.prefer_local_model = update_data.prefer_local_model
     db.commit()

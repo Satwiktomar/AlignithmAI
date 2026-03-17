@@ -114,3 +114,76 @@ class TestScraper:
         from app.services.scraper import _validate_url
         result = _validate_url("https://www.linkedin.com/jobs/123")
         assert result == "https://www.linkedin.com/jobs/123"
+
+
+class TestGetAiConfig:
+    """Tests for the get_ai_config() provider-routing helper."""
+
+    def test_gemini_provider_returns_gemini_key(self):
+        from app.services.gemini import get_ai_config
+        from app.services.auth import encrypt_api_key
+
+        class FakeUser:
+            ai_provider = "gemini"
+            gemini_api_key = encrypt_api_key("test-gemini-key")
+            openai_api_key = encrypt_api_key("test-openai-key")
+
+        key, provider = get_ai_config(FakeUser())
+        assert provider == "gemini"
+        assert key == "test-gemini-key"
+
+    def test_openai_provider_returns_openai_key(self):
+        from app.services.gemini import get_ai_config
+        from app.services.auth import encrypt_api_key
+
+        class FakeUser:
+            ai_provider = "openai"
+            gemini_api_key = encrypt_api_key("test-gemini-key")
+            openai_api_key = encrypt_api_key("test-openai-key")
+
+        key, provider = get_ai_config(FakeUser())
+        assert provider == "openai"
+        assert key == "test-openai-key"
+
+    def test_no_provider_defaults_to_gemini(self):
+        from app.services.gemini import get_ai_config
+
+        class FakeUser:
+            ai_provider = None
+            gemini_api_key = None
+            openai_api_key = None
+
+        key, provider = get_ai_config(FakeUser())
+        assert provider == "gemini"
+        assert key is None
+
+    def test_missing_ai_provider_attr_defaults_to_gemini(self):
+        from app.services.gemini import get_ai_config
+
+        class FakeUser:
+            gemini_api_key = None
+
+        key, provider = get_ai_config(FakeUser())
+        assert provider == "gemini"
+
+
+class TestOpenAIQuotaError:
+    """Tests for _is_openai_quota_error() detection."""
+
+    def test_429_detected(self):
+        from app.services.openai_service import _is_openai_quota_error
+        assert _is_openai_quota_error(Exception("Error 429 rate limit"))
+
+    def test_rate_limit_detected(self):
+        from app.services.openai_service import _is_openai_quota_error
+        assert _is_openai_quota_error(Exception("rate_limit_exceeded"))
+
+    def test_insufficient_quota_detected(self):
+        from app.services.openai_service import _is_openai_quota_error
+        assert _is_openai_quota_error(Exception("insufficient_quota"))
+
+    def test_non_quota_error(self):
+        from app.services.openai_service import _is_openai_quota_error
+        assert not _is_openai_quota_error(Exception("Connection refused"))
+        assert not _is_openai_quota_error(Exception("Invalid API key"))
+

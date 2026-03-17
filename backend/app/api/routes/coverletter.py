@@ -6,8 +6,7 @@ from app.models import CoverLetter, Resume, JobDescription
 from app.schemas import CoverLetterCreate, CoverLetterOut
 from app.api.routes.auth import get_current_user
 from app.models import User
-from app.services.auth import decrypt_api_key
-from app.services.gemini import generate
+from app.services.gemini import generate, get_ai_config
 from app.prompts import COVER_LETTER_PROMPT
 import json
 
@@ -36,7 +35,8 @@ async def generate_cover_letter(
         resume_json=json.dumps(resume.parsed_json, indent=2)[:4000],
         jd_json=json.dumps(job.parsed_json, indent=2)[:3000]
     )
-    generated_text = await generate(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    generated_text = await generate(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
 
     cl = CoverLetter(
         user_id=current_user.id,

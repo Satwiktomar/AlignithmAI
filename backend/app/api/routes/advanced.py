@@ -6,8 +6,7 @@ from app.limiter import limiter
 from app.models import Resume, JobDescription, MatchScore, Project, CoverLetter
 from app.api.routes.auth import get_current_user
 from app.models import User
-from app.services.auth import decrypt_api_key
-from app.services.gemini import generate_json, generate_text
+from app.services.gemini import generate_json, generate_text, get_ai_config
 from app.services.ollama_service import get_ollama_status
 from app.prompts import SKILL_GAP_PROMPT, RECRUITER_SIM_PROMPT, ROADMAP_BUILDER_PROMPT
 import json
@@ -51,7 +50,8 @@ async def get_skill_gap(
         resume_skills=resume_skills,
         jd_skills=jd_skills
     )
-    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    result = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
     return result
 
 
@@ -74,7 +74,8 @@ async def recruiter_simulation(
         resume_json=json.dumps(resume.parsed_json, indent=2)[:6000],
         jd_json=json.dumps(job.parsed_json, indent=2)[:4000]
     )
-    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    result = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
     return result
 
 
@@ -238,7 +239,8 @@ Return ONLY valid JSON:
   "overall_advice": ""
 }}
 """
-    result = await generate_json(prompt, user_api_key=decrypt_api_key(current_user.gemini_api_key), use_local_model=current_user.prefer_local_model)
+    api_key, provider = get_ai_config(current_user)
+    result = await generate_json(prompt, user_api_key=api_key, use_local_model=current_user.prefer_local_model, provider=provider)
     return result
 
 
@@ -280,10 +282,12 @@ async def build_roadmap(
         user_input=req.topic[:3000],
         context=req.context[:500]
     )
+    api_key, provider = get_ai_config(current_user)
     result = await generate_json(
         prompt,
-        user_api_key=decrypt_api_key(current_user.gemini_api_key),
-        use_local_model=current_user.prefer_local_model
+        user_api_key=api_key,
+        use_local_model=current_user.prefer_local_model,
+        provider=provider
     )
 
     # Save to cache (only if generation succeeded)

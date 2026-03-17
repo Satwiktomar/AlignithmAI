@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from routes import similarity, ats, taxonomy
-from embedding_engine import warmup_model, get_cache_stats
+from embedding_engine import get_cache_stats
 import os
 import time
 import logging
@@ -50,7 +50,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 app = FastAPI(
     title="RoleFit AI — ML Service",
     description="Embedding-based semantic similarity, ATS scoring, and skill taxonomy normalization",
-    version="2.0.0"
+    version="3.0.0"
 )
 
 app.add_middleware(InternalAuthMiddleware)
@@ -67,42 +67,25 @@ app.include_router(ats.router)
 app.include_router(taxonomy.router)
 
 
-# ── Model status (lazy — NOT loaded at startup) ────────────────────────
-
-_model_status = {"status": "not_loaded"}
-
-
 @app.on_event("startup")
 async def startup_event():
-    logger.info("ML Service started (model will load on first request)")
+    logger.info("ML Service started (Gemini embedding API — no local model)")
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────
 
 @app.get("/")
 def root():
-    return {"message": "RoleFit ML Service running", "version": "2.0.0", "docs": "/docs"}
+    return {"message": "RoleFit ML Service running", "version": "3.0.0", "docs": "/docs"}
 
 
 @app.get("/health")
 def health():
     return {
         "status": "healthy",
-        "model": _model_status,
+        "embedding_backend": "gemini-text-embedding-004",
         "cache": get_cache_stats(),
     }
-
-
-@app.post("/warmup")
-def warmup():
-    """Optional endpoint: call AFTER the service is healthy to pre-load the model."""
-    global _model_status
-    try:
-        _model_status = warmup_model()
-        return _model_status
-    except Exception as e:
-        _model_status = {"status": "error", "error": str(e)}
-        return _model_status
 
 
 @app.get("/cache-stats")
