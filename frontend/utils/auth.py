@@ -1,8 +1,17 @@
 import streamlit as st
 import requests
 import os
+import logging
 
-API_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/") + "/api"
+logger = logging.getLogger("rolefit-frontend")
+
+_raw_backend = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+# Ensure the URL has a scheme (https:// or http://)
+if _raw_backend and not _raw_backend.startswith(("http://", "https://")):
+    _raw_backend = f"https://{_raw_backend}"
+API_URL = f"{_raw_backend}/api"
+
+logger.info(f"Frontend API_URL configured as: {API_URL}")
 
 
 def api(method: str, endpoint: str, **kwargs):
@@ -10,19 +19,24 @@ def api(method: str, endpoint: str, **kwargs):
     headers = kwargs.pop("headers", {})
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    url = f"{API_URL}{endpoint}"
     try:
-        return requests.request(
+        resp = requests.request(
             method,
-            f"{API_URL}{endpoint}",
+            url,
             headers=headers,
             timeout=300,
             **kwargs
         )
+        return resp
     except requests.exceptions.ReadTimeout:
         st.error("⏱️ Request timed out — the server is still processing. Try again in a moment.")
         return None
+    except requests.exceptions.ConnectionError:
+        st.error(f"🔌 Cannot connect to backend at `{_raw_backend}`. The server may be starting up — please try again in a minute.")
+        return None
     except Exception as e:
-        st.error(f"Backend not reachable: {e}")
+        st.error(f"Backend not reachable at `{_raw_backend}`: {e}")
         return None
 
 
