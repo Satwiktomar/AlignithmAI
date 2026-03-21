@@ -1,106 +1,149 @@
 import streamlit as st
 from utils.auth import api
-from utils.styles import render_page_header, render_empty_state, score_color
+from utils.styles import render_page_header, render_empty_state, render_score_ring, score_color
 
 
 def render():
-    render_page_header("Match Report", "Score your resume against a job description")
+    render_page_header("Match Report", "AI-powered resume-to-job fit analysis")
 
-    r_resumes = api("GET", "/resume/")
+    r_res = api("GET", "/resume/")
     r_jobs = api("GET", "/jobs/")
-
-    if not r_resumes or not r_jobs:
+    if not r_res or not r_jobs:
         return
 
-    resumes = r_resumes.json() if r_resumes.ok else []
+    resumes = r_res.json() if r_res.ok else []
     jobs = r_jobs.json() if r_jobs.ok else []
 
     if not resumes:
-        render_empty_state(None, "No resumes uploaded", "Upload a resume first from the Resume page.")
+        render_empty_state(None, "No resumes", "Upload a resume first.")
         return
     if not jobs:
-        render_empty_state(None, "No jobs added", "Analyze a job description first from the Jobs page.")
+        render_empty_state(None, "No jobs", "Add a job description first.")
         return
 
-    col1, col2 = st.columns(2)
-    with col1:
-        resume_options = {f"{r.get('original_filename', 'Resume')} (#{r['id']})": r["id"] for r in resumes}
-        sel_resume_label = st.selectbox("Resume", list(resume_options.keys()))
-        resume_id = resume_options[sel_resume_label]
-    with col2:
-        job_options = {f"{j.get('job_title','') or 'Job'} @ {j.get('company_name','') or '?'} (#{j['id']})": j["id"] for j in jobs}
-        sel_job_label = st.selectbox("Job Description", list(job_options.keys()))
-        job_id = job_options[sel_job_label]
+    c1, c2 = st.columns(2)
+    with c1:
+        resume_opts = {f"{r.get('original_filename', 'Resume')} (#{r['id']})": r["id"] for r in resumes}
+        sel_r = st.selectbox("Resume", list(resume_opts.keys()))
+    with c2:
+        job_opts = {f"{j.get('job_title', 'Job')} @ {j.get('company_name', '?')} (#{j['id']})": j["id"] for j in jobs}
+        sel_j = st.selectbox("Job", list(job_opts.keys()))
 
-    if st.button("Run Match Analysis", use_container_width=True):
-        with st.spinner("Analyzing..."):
-            r = api("POST", "/match/", params={"resume_id": resume_id, "job_id": job_id})
-        if not r or not r.ok:
-            st.error(r.json().get("detail", "Match analysis failed.") if r else "API error.")
-            return
-        st.session_state["last_match"] = r.json()
+    if st.button("🎯 Analyze Match", use_container_width=True):
+        with st.spinner("Running AI match analysis..."):
+            r = api("POST", "/match/", timeout=600, json={
+                "resume_id": resume_opts[sel_r],
+                "job_id": job_opts[sel_j]
+            })
+        if r and r.ok:
+            st.session_state["match_result"] = r.json()
+        elif r:
+            st.error(r.json().get("detail", "Match failed."))
 
-    ms = st.session_state.get("last_match")
-    if not ms:
+    result = st.session_state.get("match_result")
+    if not result:
         return
 
     st.markdown("---")
 
-    overall = float(ms.get("overall_score", 0))
-    st.markdown(f"### Overall Score: {int(overall)}")
+    # ── Overall Score Ring ──
+    overall = float(result.get("overall_score", result.get("score", 0)))
+    col_center = st.columns([1, 2, 1])[1]
+    with col_center:
+        render_score_ring(overall, "Overall Match", size=140)
 
-    sub_scores = [
-        ("Skill Match", "skill_score"),
-        ("Keyword", "keyword_score"),
-        ("Experience", "experience_score"),
-        ("ATS Score", "ats_score"),
+    # ── Sub-Scores ──
+    sub_keys = [
+        ("skill_match_score", "Skill Match", "🛠"),
+        ("keyword_score", "Keywords", "🔑"),
+        ("experience_score", "Experience", "📊"),
+        ("ats_score", "ATS Score", "🤖"),
     ]
-    c1, c2, c3, c4 = st.columns(4)
-    for col, (label, key) in zip([c1, c2, c3, c4], sub_scores):
-        val = int(float(ms.get(key, 0)))
+    score_cols = st.columns(len(sub_keys))
+    for col, (key, label, icon) in zip(score_cols, sub_keys):
         with col:
-            st.metric(label, val)
+            val = float(result.get(key, 0))
+            color = score_color(val)
+            st.markdown(f"""
+<div style="text-align:center;background:rgba(19,19,43,0.5);border:1px solid rgba(139,92,246,0.1);
+            border-radius:12px;padding:0.8rem 0.5rem;backdrop-filter:blur(6px);
+            animation:fadeInUp 0.5s ease;">
+  <div style="font-size:0.65rem;color:#6B6B8D;text-transform:uppercase;letter-spacing:0.08em;
+              font-weight:600;font-family:'Inter',sans-serif;">{icon} {label}</div>
+  <div style="font-size:1.5rem;font-weight:800;color:{color};margin-top:0.2rem;
+              font-family:'Inter',sans-serif;">{int(val)}</div>
+</div>
+""", unsafe_allow_html=True)
 
-    details = ms.get("details_json", {})
+    st.markdown('<div style="height:0.8rem;"></div>', unsafe_allow_html=True)
 
-    tab_overview, tab_suggest = st.tabs(["Analysis", "Suggestions"])
+    # ── Skills Breakdown ──
+    col_matched, col_missing = st.columns(2)
+    with col_matched:
+        matched = result.get("matched_skills") or []
+        if matched:
+            st.markdown("""
+<div style="font-size:0.7rem;color:#6B6B8D;text-transform:uppercase;letter-spacing:0.08em;
+            font-weight:600;margin-bottom:0.4rem;font-family:'Inter',sans-serif;">✅ Matched Skills</div>
+""", unsafe_allow_html=True)
+            badges = ""
+            for sk in matched:
+                badges += (
+                    f'<span style="display:inline-block;padding:0.2rem 0.65rem;border-radius:16px;'
+                    f'font-size:0.73rem;font-weight:600;background:rgba(34,197,94,0.1);'
+                    f'color:#86EFAC;border:1px solid rgba(34,197,94,0.25);margin:2px;'
+                    f'font-family:\'Inter\',sans-serif;">{sk}</span>'
+                )
+            st.markdown(badges, unsafe_allow_html=True)
 
-    with tab_overview:
-        if details.get("summary"):
-            st.info(details["summary"])
+    with col_missing:
+        missing = result.get("missing_skills") or []
+        if missing:
+            st.markdown("""
+<div style="font-size:0.7rem;color:#6B6B8D;text-transform:uppercase;letter-spacing:0.08em;
+            font-weight:600;margin-bottom:0.4rem;font-family:'Inter',sans-serif;">❌ Missing Skills</div>
+""", unsafe_allow_html=True)
+            badges = ""
+            for sk in missing:
+                badges += (
+                    f'<span style="display:inline-block;padding:0.2rem 0.65rem;border-radius:16px;'
+                    f'font-size:0.73rem;font-weight:600;background:rgba(239,68,68,0.1);'
+                    f'color:#FCA5A5;border:1px solid rgba(239,68,68,0.25);margin:2px;'
+                    f'font-family:\'Inter\',sans-serif;">{sk}</span>'
+                )
+            st.markdown(badges, unsafe_allow_html=True)
 
-        if details.get("matched_skills"):
-            st.markdown("**Matched Skills**")
-            st.write(", ".join(details["matched_skills"]))
+    st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
 
-        if details.get("missing_skills"):
-            st.markdown("**Missing Skills**")
-            st.write(", ".join(details["missing_skills"]))
+    # ── Analysis Sections ──
+    tab_str, tab_weak, tab_sug = st.tabs(["💪 Strengths", "⚠️ Weaknesses", "💡 Suggestions"])
 
-        if details.get("strengths"):
-            with st.expander("Strengths"):
-                for item in details["strengths"]:
-                    st.markdown(f"- {item}")
+    with tab_str:
+        for item in (result.get("strengths") or []):
+            st.markdown(f"""
+<div style="background:rgba(34,197,94,0.05);border-left:3px solid #22c55e;
+            border-radius:0 8px 8px 0;padding:0.6rem 1rem;margin-bottom:0.4rem;
+            font-size:0.85rem;color:#B0B0CC;font-family:'Inter',sans-serif;">
+  {item}
+</div>
+""", unsafe_allow_html=True)
 
-        if details.get("weaknesses"):
-            with st.expander("Areas to Improve"):
-                for item in details["weaknesses"]:
-                    st.markdown(f"- {item}")
+    with tab_weak:
+        for item in (result.get("weaknesses") or []):
+            st.markdown(f"""
+<div style="background:rgba(245,158,11,0.05);border-left:3px solid #f59e0b;
+            border-radius:0 8px 8px 0;padding:0.6rem 1rem;margin-bottom:0.4rem;
+            font-size:0.85rem;color:#B0B0CC;font-family:'Inter',sans-serif;">
+  {item}
+</div>
+""", unsafe_allow_html=True)
 
-    with tab_suggest:
-        with st.spinner("Generating suggestions..."):
-            r_sug = api("POST", "/match/suggest", params={"resume_id": resume_id, "job_id": job_id})
-        if r_sug and r_sug.ok:
-            sug = r_sug.json()
-            if isinstance(sug, dict):
-                for section, items in sug.items():
-                    st.markdown(f"**{section.replace('_', ' ').title()}**")
-                    if isinstance(items, list):
-                        for item in items:
-                            st.markdown(f"- {item}")
-                    else:
-                        st.markdown(str(items))
-            else:
-                st.write(sug)
-        else:
-            st.info("Suggestions not available.")
+    with tab_sug:
+        for item in (result.get("suggestions") or []):
+            st.markdown(f"""
+<div style="background:rgba(99,102,241,0.05);border-left:3px solid #6366F1;
+            border-radius:0 8px 8px 0;padding:0.6rem 1rem;margin-bottom:0.4rem;
+            font-size:0.85rem;color:#B0B0CC;font-family:'Inter',sans-serif;">
+  {item}
+</div>
+""", unsafe_allow_html=True)

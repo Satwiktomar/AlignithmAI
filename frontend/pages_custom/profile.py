@@ -4,150 +4,138 @@ from utils.styles import render_page_header
 
 
 def render():
-    render_page_header("Settings", "Manage your account, API keys, and preferences")
+    render_page_header("Settings", "Manage your profile, API keys, and preferences")
 
-    r = api("GET", "/auth/me")
-    if not r or not r.ok:
-        st.error("Error fetching profile.")
-        return
-    user_data = r.json()
+    tab_profile, tab_api, tab_danger = st.tabs(["👤 Profile", "🔑 API Keys", "⚠️ Account"])
 
-    tab_profile, tab_api, tab_danger = st.tabs(["Profile", "API Keys", "Danger Zone"])
+    user = st.session_state.get("user", {})
 
     with tab_profile:
-        st.markdown(f"**Name:** {user_data.get('name', '')}")
-        st.markdown(f"**Email:** {user_data.get('email', '')}")
+        st.markdown(f"""
+<div style="background:rgba(19,19,43,0.6);border:1px solid rgba(139,92,246,0.12);
+            border-radius:14px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+            backdrop-filter:blur(10px);display:flex;align-items:center;gap:1rem;
+            animation:fadeInUp 0.4s ease;">
+  <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#6366F1);
+              display:flex;align-items:center;justify-content:center;font-size:1.3rem;
+              flex-shrink:0;color:white;font-weight:700;font-family:'Inter',sans-serif;">
+    {(user.get('name', user.get('email', 'U'))[0:1]).upper()}
+  </div>
+  <div>
+    <div style="font-size:1rem;font-weight:700;color:#E8E8F0;font-family:'Inter',sans-serif;">
+      {user.get('name', '—')}
+    </div>
+    <div style="font-size:0.8rem;color:#8B8BA8;font-family:'Inter',sans-serif;">
+      {user.get('email', '—')}
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-        with st.expander("Edit Name"):
-            new_name = st.text_input("New Name", value=user_data.get("name", ""))
-            if st.button("Update Name"):
-                r_update = api("PUT", "/auth/me", json={"name": new_name})
-                if r_update and r_update.ok:
-                    st.success("Name updated.")
-                    st.session_state["user"]["name"] = new_name
+        provider = user.get("ai_provider", "gemini")
+        st.markdown(f"""
+<div style="background:rgba(19,19,43,0.4);border:1px solid rgba(139,92,246,0.1);
+            border-radius:10px;padding:0.7rem 1rem;">
+  <div style="font-size:0.7rem;color:#6B6B8D;text-transform:uppercase;letter-spacing:0.08em;
+              font-weight:600;font-family:'Inter',sans-serif;">Current AI Provider</div>
+  <div style="font-size:0.9rem;font-weight:600;color:#E8E8F0;margin-top:0.15rem;
+              font-family:'Inter',sans-serif;">{provider.upper()}</div>
+</div>
+""", unsafe_allow_html=True)
+
+        st.markdown('<div style="height:0.6rem;"></div>', unsafe_allow_html=True)
+
+        new_provider = st.radio("Switch AI Provider", ["gemini", "openai"], horizontal=True,
+                                index=0 if provider == "gemini" else 1, key="prov_switch")
+        if new_provider != provider:
+            if st.button("Update Provider", use_container_width=True):
+                r = api("PUT", "/auth/me", json={"ai_provider": new_provider})
+                if r and r.ok:
+                    st.session_state["user"]["ai_provider"] = new_provider
+                    st.success(f"✅ Switched to {new_provider.upper()}")
                     st.rerun()
-                else:
-                    st.error("Failed to update name.")
 
     with tab_api:
-        st.markdown("#### AI Provider")
+        has_key = user.get("has_api_key", False)
+        provider = user.get("ai_provider", "gemini")
 
-        current_provider = user_data.get("ai_provider", "gemini")
-        provider = st.radio(
-            "Choose your AI provider",
-            options=["gemini", "openai"],
-            index=0 if current_provider == "gemini" else 1,
-            format_func=lambda x: "Google Gemini (free tier available)" if x == "gemini" else "OpenAI (requires paid key)",
-            horizontal=True,
-            key="provider_radio",
-        )
-
-        # Save provider change immediately
-        if provider != current_provider:
-            r_prov = api("PUT", "/auth/me", json={"ai_provider": provider})
-            if r_prov and r_prov.ok:
-                st.success(f"Switched to **{provider.upper()}** provider.")
-                st.rerun()
-
-        st.divider()
-
-        # ── Gemini key section ──────────────────────────────────────────
-        st.markdown("#### Gemini API Key")
-        has_gemini = user_data.get("has_api_key", False) if current_provider == "gemini" else bool(user_data.get("has_api_key", False))
-        # Recalculate: has_api_key depends on active provider in the model,
-        # so check the raw field via a different indicator
-        gemini_configured = user_data.get("has_api_key", False) if current_provider == "gemini" else False
-        # Use a simple heuristic: if provider is gemini and has_api_key is true
-        if current_provider == "gemini" and user_data.get("has_api_key", False):
-            st.success("✅ Gemini key is configured and active.")
-        elif current_provider != "gemini" and user_data.get("has_api_key", False):
-            # Provider is openai but gemini key might still exist
-            st.info("Gemini key is saved but **OpenAI** is your active provider.")
+        # ── Status ──
+        if has_key:
+            status_color = "#22c55e"
+            status_bg = "rgba(34,197,94,0.08)"
+            status_text = "✅ API key configured"
         else:
-            st.warning("No Gemini API key configured.")
+            status_color = "#f59e0b"
+            status_bg = "rgba(245,158,11,0.08)"
+            status_text = "⚠️ No API key set"
 
-        st.markdown(
-            "Get a free key at [aistudio.google.com](https://aistudio.google.com). "
-            "Your key is encrypted with AES-256 (Fernet) before storage."
-        )
-        new_gemini_key = st.text_input(
-            "Enter Gemini API Key",
-            type="password",
-            placeholder="AIza...",
-            key="gemini_key_input",
-        )
-        col_gsave, col_gremove = st.columns(2)
-        with col_gsave:
-            if st.button("Save Gemini Key", use_container_width=True, disabled=not new_gemini_key):
-                r_update = api("PUT", "/auth/me", json={"gemini_api_key": new_gemini_key})
-                if r_update and r_update.ok:
-                    st.success("Gemini API key saved and encrypted.")
+        st.markdown(f"""
+<div style="background:{status_bg};border:1px solid {status_color}30;border-radius:10px;
+            padding:0.7rem 1rem;margin-bottom:1rem;">
+  <div style="font-size:0.85rem;font-weight:600;color:{status_color};
+              font-family:'Inter',sans-serif;">{status_text}</div>
+  <div style="font-size:0.75rem;color:#8B8BA8;margin-top:0.1rem;
+              font-family:'Inter',sans-serif;">
+    Provider: <strong>{provider.upper()}</strong>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+        api_key_label = "Gemini API Key" if provider == "gemini" else "OpenAI API Key"
+        api_key = st.text_input(api_key_label, type="password",
+                                placeholder=f"Enter your {provider.title()} API key")
+
+        if st.button("💾 Save API Key", use_container_width=True):
+            if not api_key.strip():
+                st.error("Please enter an API key.")
+            else:
+                key_field = "gemini_api_key" if provider == "gemini" else "openai_api_key"
+                r = api("PUT", "/auth/me", json={key_field: api_key.strip()})
+                if r and r.ok:
+                    st.session_state["user"]["has_api_key"] = True
+                    st.success("✅ API key saved!")
                     st.rerun()
-                else:
-                    st.error("Failed to save Gemini key.")
-        with col_gremove:
-            if st.button("Remove Gemini Key", use_container_width=True):
-                r_update = api("PUT", "/auth/me", json={"gemini_api_key": ""})
-                if r_update and r_update.ok:
-                    st.success("Gemini key removed.")
-                    st.rerun()
-                else:
-                    st.error("Failed to remove key.")
+                elif r:
+                    st.error(r.json().get("detail", "Failed to save key."))
 
-        st.divider()
-
-        # ── OpenAI key section ──────────────────────────────────────────
-        st.markdown("#### OpenAI API Key")
-        has_openai = user_data.get("has_openai_key", False)
-        if current_provider == "openai" and has_openai:
-            st.success("✅ OpenAI key is configured and active.")
-        elif current_provider != "openai" and has_openai:
-            st.info("OpenAI key is saved but **Gemini** is your active provider.")
-        else:
-            st.warning("No OpenAI API key configured.")
-
-        st.markdown(
-            "Get a key at [platform.openai.com](https://platform.openai.com/api-keys). "
-            "Your key is encrypted with AES-256 (Fernet) before storage."
-        )
-        new_openai_key = st.text_input(
-            "Enter OpenAI API Key",
-            type="password",
-            placeholder="sk-...",
-            key="openai_key_input",
-        )
-        col_osave, col_oremove = st.columns(2)
-        with col_osave:
-            if st.button("Save OpenAI Key", use_container_width=True, disabled=not new_openai_key):
-                r_update = api("PUT", "/auth/me", json={"openai_api_key": new_openai_key})
-                if r_update and r_update.ok:
-                    st.success("OpenAI API key saved and encrypted.")
-                    st.rerun()
-                else:
-                    st.error("Failed to save OpenAI key.")
-        with col_oremove:
-            if has_openai:
-                if st.button("Remove OpenAI Key", use_container_width=True):
-                    r_update = api("PUT", "/auth/me", json={"openai_api_key": ""})
-                    if r_update and r_update.ok:
-                        st.success("OpenAI key removed.")
-                        st.rerun()
-                    else:
-                        st.error("Failed to remove key.")
+        st.markdown("""
+<div style="background:rgba(19,19,43,0.3);border-radius:10px;padding:0.6rem 0.8rem;
+            margin-top:0.8rem;">
+  <div style="font-size:0.75rem;color:#6B6B8D;line-height:1.5;font-family:'Inter',sans-serif;">
+    🔒 Your API key is encrypted and stored securely.
+    Get a Gemini key at <a href="https://aistudio.google.com/apikey" target="_blank"
+    style="color:#A78BFA;">Google AI Studio</a> or an OpenAI key at
+    <a href="https://platform.openai.com/api-keys" target="_blank" style="color:#A78BFA;">OpenAI</a>.
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
     with tab_danger:
-        st.markdown("#### Delete Account")
-        st.warning("This is permanent. All resumes, jobs, scores, and cover letters will be deleted.")
+        st.markdown(f"""
+<div style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);
+            border-radius:14px;padding:1.2rem 1.4rem;margin-top:0.5rem;">
+  <div style="font-size:0.85rem;font-weight:700;color:#FCA5A5;margin-bottom:0.3rem;
+              font-family:'Inter',sans-serif;">⚠️ Danger Zone</div>
+  <div style="font-size:0.8rem;color:#9B9BB0;font-family:'Inter',sans-serif;
+              line-height:1.5;margin-bottom:0.8rem;">
+    These actions are irreversible. Deleting your account removes all data permanently.
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-        validation = st.text_input("Type DELETE to confirm")
-        if st.button("Delete My Account"):
-            if validation == "DELETE":
-                r_del = api("DELETE", "/auth/me")
-                if r_del and r_del.ok:
+        st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
+
+        confirm = st.text_input("Type 'DELETE' to confirm", key="confirm_delete",
+                                placeholder="DELETE")
+        if st.button("🗑 Delete My Account", use_container_width=True):
+            if confirm != "DELETE":
+                st.error("Type DELETE to confirm.")
+            else:
+                r = api("DELETE", "/auth/me")
+                if r and r.ok:
                     for k in list(st.session_state.keys()):
                         del st.session_state[k]
+                    st.success("Account deleted.")
                     st.rerun()
-                else:
-                    st.error("Error deleting account.")
-            else:
-                st.error("You must type DELETE to confirm.")
+                elif r:
+                    st.error(r.json().get("detail", "Delete failed."))

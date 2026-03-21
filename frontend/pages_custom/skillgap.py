@@ -347,9 +347,9 @@ def render():
         job_opts = {f"{j.get('job_title', 'Job')} @ {j.get('company_name', '?')} (#{j['id']})": j["id"] for j in jobs}
         sel_j = st.selectbox("Job", list(job_opts.keys()))
 
-    if st.button("Analyze Skill Gap", use_container_width=True):
-        with st.spinner("Analyzing..."):
-            r = api("POST", "/advanced/skillgap",
+    if st.button("📊 Analyze Skill Gap", use_container_width=True):
+        with st.spinner("Running AI skill gap analysis..."):
+            r = api("POST", "/advanced/skillgap", timeout=600,
                     params={"resume_id": resume_opts[sel_r], "job_id": job_opts[sel_j]})
         if r and r.ok:
             st.session_state["skillgap_result"] = r.json()
@@ -376,20 +376,54 @@ def render():
     # ── Skills summary ──────────────────────────────────────────────────
     col_have, col_gap = st.columns(2)
     with col_have:
-        if result.get("matched_skills"):
-            st.markdown("**✅ Skills You Have**")
-            st.write(", ".join(result["matched_skills"]))
+        matched = result.get("matched_skills") or []
+        if matched:
+            st.markdown("""
+<div style="font-size:0.7rem;color:#6B6B8D;text-transform:uppercase;letter-spacing:0.08em;
+            font-weight:600;margin-bottom:0.4rem;font-family:'Inter',sans-serif;">✅ Skills You Have</div>
+""", unsafe_allow_html=True)
+            badges = ""
+            for sk in matched:
+                badges += (
+                    f'<span style="display:inline-block;padding:0.2rem 0.65rem;border-radius:16px;'
+                    f'font-size:0.73rem;font-weight:600;background:rgba(34,197,94,0.1);'
+                    f'color:#86EFAC;border:1px solid rgba(34,197,94,0.25);margin:2px;'
+                    f'font-family:Inter,sans-serif;">{sk}</span>'
+                )
+            st.markdown(badges, unsafe_allow_html=True)
     with col_gap:
-        if result.get("missing_skills"):
-            st.markdown("**🎯 Skills to Acquire**")
-            st.write(", ".join(result["missing_skills"]))
+        missing = result.get("missing_skills") or []
+        if missing:
+            st.markdown("""
+<div style="font-size:0.7rem;color:#6B6B8D;text-transform:uppercase;letter-spacing:0.08em;
+            font-weight:600;margin-bottom:0.4rem;font-family:'Inter',sans-serif;">🎯 Skills to Acquire</div>
+""", unsafe_allow_html=True)
+            badges = ""
+            for sk in missing:
+                badges += (
+                    f'<span style="display:inline-block;padding:0.2rem 0.65rem;border-radius:16px;'
+                    f'font-size:0.73rem;font-weight:600;background:rgba(239,68,68,0.1);'
+                    f'color:#FCA5A5;border:1px solid rgba(239,68,68,0.25);margin:2px;'
+                    f'font-family:Inter,sans-serif;">{sk}</span>'
+                )
+            st.markdown(badges, unsafe_allow_html=True)
 
     severity = result.get("skill_gap_severity", "")
     if severity:
-        sev_map = {"low": ("🟢", "Low"), "medium": ("🟡", "Medium"),
-                   "high": ("🟠", "High"), "critical": ("🔴", "Critical")}
-        icon, label = sev_map.get(severity.lower(), ("⚪", severity.title()))
-        st.markdown(f"**Gap Severity:** {icon} {label}")
+        sev_map = {
+            "low":      ("#22c55e", "rgba(34,197,94,0.08)",  "🟢 Low"),
+            "medium":   ("#f59e0b", "rgba(245,158,11,0.08)", "🟡 Medium"),
+            "high":     ("#f97316", "rgba(249,115,22,0.08)", "🟠 High"),
+            "critical": ("#ef4444", "rgba(239,68,68,0.08)",  "🔴 Critical"),
+        }
+        color, bg, label = sev_map.get(severity.lower(), ("#8B8BA8", "rgba(19,19,43,0.4)", f"⚪ {severity.title()}"))
+        st.markdown(f"""
+<div style="background:{bg};border:1px solid {color}30;border-radius:10px;
+            padding:0.6rem 1rem;margin:0.8rem 0;display:inline-block;">
+  <span style="font-size:0.78rem;font-weight:700;color:{color};
+               font-family:'Inter',sans-serif;">Gap Severity: {label}</span>
+</div>
+""", unsafe_allow_html=True)
 
     # ── Learning Roadmap (flowchart) ────────────────────────────────────
     if result.get("learning_roadmap"):
@@ -448,16 +482,34 @@ def render():
             if isinstance(qw, dict):
                 label = qw.get("name") or qw.get("skill") or qw.get("action") or str(qw)
                 extra = qw.get("timeline", "")
-                st.markdown(f"- {label}" + (f" — _{extra}_" if extra else ""))
+                st.markdown(f"""
+<div style="background:rgba(34,197,94,0.05);border-left:3px solid #22c55e;
+            border-radius:0 8px 8px 0;padding:0.5rem 0.8rem;margin-bottom:0.3rem;
+            font-size:0.83rem;color:#B0B0CC;font-family:'Inter',sans-serif;">
+  {label}{f' — <em>{extra}</em>' if extra else ''}
+</div>
+""", unsafe_allow_html=True)
             else:
-                st.markdown(f"- {qw}")
+                st.markdown(f"""
+<div style="background:rgba(34,197,94,0.05);border-left:3px solid #22c55e;
+            border-radius:0 8px 8px 0;padding:0.5rem 0.8rem;margin-bottom:0.3rem;
+            font-size:0.83rem;color:#B0B0CC;font-family:'Inter',sans-serif;">
+  {qw}
+</div>
+""", unsafe_allow_html=True)
 
     # ── Long-term Goals ─────────────────────────────────────────────────
     if result.get("long_term_goals"):
         st.markdown("---")
         st.markdown("#### 🎯 Long-term Goals")
         for lg in result["long_term_goals"]:
-            st.markdown(f"- {lg}")
+            st.markdown(f"""
+<div style="background:rgba(99,102,241,0.05);border-left:3px solid #6366F1;
+            border-radius:0 8px 8px 0;padding:0.5rem 0.8rem;margin-bottom:0.3rem;
+            font-size:0.83rem;color:#B0B0CC;font-family:'Inter',sans-serif;">
+  {lg}
+</div>
+""", unsafe_allow_html=True)
 
     # ── Certifications ──────────────────────────────────────────────────
     if result.get("certifications"):
@@ -492,4 +544,10 @@ def render():
         st.markdown("---")
         st.markdown("#### 📝 Resume Update Tips")
         for tip in result["resume_update_tips"]:
-            st.markdown(f"- {tip}")
+            st.markdown(f"""
+<div style="background:rgba(245,158,11,0.05);border-left:3px solid #f59e0b;
+            border-radius:0 8px 8px 0;padding:0.5rem 0.8rem;margin-bottom:0.3rem;
+            font-size:0.83rem;color:#B0B0CC;font-family:'Inter',sans-serif;">
+  {tip}
+</div>
+""", unsafe_allow_html=True)

@@ -324,11 +324,13 @@ if (DATA.related && DATA.related.length) {{
 def render():
     render_page_header("Roadmap Builder", "Generate detailed learning roadmaps for any role, technology, or skill")
 
-    st.markdown(
-        "Enter a **job role** (e.g. ML Engineer), **technology** (e.g. Blockchain), "
-        "**framework** (e.g. React), **skill** (e.g. System Design), or paste a **full job description** "
-        "to generate a comprehensive roadmap."
-    )
+    st.markdown("""
+<div style="font-size:0.85rem;color:#8B8BA8;font-family:'Inter',sans-serif;line-height:1.6;margin-bottom:0.6rem;">
+  Enter a <strong style="color:#C4B5FD;">job role</strong> (e.g. ML Engineer), <strong style="color:#C4B5FD;">technology</strong> (e.g. Blockchain),
+  <strong style="color:#C4B5FD;">framework</strong> (e.g. React), <strong style="color:#C4B5FD;">skill</strong> (e.g. System Design), or paste a
+  <strong style="color:#C4B5FD;">full job description</strong> to generate a comprehensive roadmap.
+</div>
+""", unsafe_allow_html=True)
 
     # ── Previously cached roadmaps ──────────────────────────────────────
     cached_list = []
@@ -340,7 +342,12 @@ def render():
         pass
 
     if cached_list:
-        st.markdown("#### 📂 Your Saved Roadmaps")
+        st.markdown("""
+<div style="font-size:0.7rem;color:#6B6B8D;text-transform:uppercase;letter-spacing:0.08em;
+            font-weight:600;margin-bottom:0.5rem;font-family:'Inter',sans-serif;">
+  📂 Your Saved Roadmaps
+</div>
+""", unsafe_allow_html=True)
         cols = st.columns([4, 2, 1])
         cols[0].markdown("**Topic**")
         cols[1].markdown("**Created**")
@@ -359,7 +366,7 @@ def render():
             c2.write(created)
             if c3.button("Load", key=f"load_{item['id']}"):
                 with st.spinner("Loading cached roadmap..."):
-                    r = api("POST", "/advanced/roadmap-builder", json={
+                    r = api("POST", "/advanced/roadmap-builder", timeout=600, json={
                         "topic": item["topic"],
                         "context": "general",
                         "force_new": False,
@@ -402,7 +409,7 @@ def render():
             st.warning("Please enter a topic or job description (at least 3 characters).")
         else:
             with st.spinner("Generating your roadmap — this may take 2-3 minutes for new topics..."):
-                r = api("POST", "/advanced/roadmap-builder", json={
+                r = api("POST", "/advanced/roadmap-builder", timeout=600, json={
                     "topic": topic.strip(),
                     "context": context,
                     "force_new": force_new,
@@ -502,8 +509,20 @@ def render():
     if progression:
         st.markdown("---")
         st.markdown("#### 📈 Career Progression")
-        prog_str = " → ".join(f"**{p}**" for p in progression)
-        st.markdown(prog_str)
+        prog_badges = ""
+        for idx, p in enumerate(progression):
+            prog_badges += (
+                f'<span style="display:inline-block;padding:0.3rem 0.8rem;border-radius:8px;'
+                f'font-size:0.8rem;font-weight:600;background:rgba(99,102,241,0.1);'
+                f'color:#A5B4FC;border:1px solid rgba(99,102,241,0.2);margin:2px;'
+                f'font-family:Inter,sans-serif;">{p}</span>'
+            )
+            if idx < len(progression) - 1:
+                prog_badges += (
+                    '<span style="color:#6366F1;font-size:1rem;margin:0 0.3rem;'
+                    'vertical-align:middle;">→</span>'
+                )
+        st.markdown(prog_badges, unsafe_allow_html=True)
 
     # ── Related roadmaps ────────────────────────────────────────────────
     related = result.get("related_roadmaps") or []

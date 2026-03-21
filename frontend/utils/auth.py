@@ -1,133 +1,126 @@
 import streamlit as st
 import requests
 import os
-import logging
+from dotenv import load_dotenv
 
-logger = logging.getLogger("rolefit-frontend")
+load_dotenv()
 
-_raw_backend = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
-# Ensure the URL has a scheme (https:// or http://)
-if _raw_backend and not _raw_backend.startswith(("http://", "https://")):
-    _raw_backend = f"https://{_raw_backend}"
-API_URL = f"{_raw_backend}/api"
-
-logger.info(f"Frontend API_URL configured as: {API_URL}")
+API_BASE = os.getenv("API_URL", "http://localhost:8000/api")
 
 
-def api(method: str, endpoint: str, **kwargs):
+def api(method: str, path: str, timeout: int = 30, **kwargs):
     token = st.session_state.get("token")
     headers = kwargs.pop("headers", {})
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    url = f"{API_URL}{endpoint}"
     try:
-        resp = requests.request(
-            method,
-            url,
-            headers=headers,
-            timeout=300,
-            **kwargs
-        )
-        return resp
-    except requests.exceptions.ReadTimeout:
-        st.error("⏱️ Request timed out — the server is still processing. Try again in a moment.")
-        return None
+        return requests.request(method, f"{API_BASE}{path}", headers=headers, timeout=timeout, **kwargs)
     except requests.exceptions.ConnectionError:
-        st.error(f"🔌 Cannot connect to backend at `{_raw_backend}`. The server may be starting up — please try again in a minute.")
+        st.error("Cannot connect to backend. Make sure the server is running.")
         return None
-    except Exception as e:
-        st.error(f"Backend not reachable at `{_raw_backend}`: {e}")
+    except requests.exceptions.Timeout:
+        st.error("Request timed out.")
         return None
+
+
+def is_logged_in():
+    return bool(st.session_state.get("token"))
 
 
 def show_auth_page():
+    # ── Background ──
     st.markdown("""
 <style>
-html, body, [class*="css"] { font-family: 'Segoe UI', system-ui, sans-serif; background-color: #0f1117; color: #e0e0e0; }
-.stApp { background-color: #0f1117; }
-header, footer, #MainMenu { visibility: hidden; }
-.stTextInput > div > div > input { background-color: #1a1d27 !important; border: 1px solid #2a2d3a !important; color: #e0e0e0 !important; border-radius: 6px !important; }
-.stButton > button, .stFormSubmitButton > button { background-color: #2563eb !important; color: #fff !important; border: none !important; border-radius: 6px !important; font-weight: 500 !important; }
-h2 { color: #f0f0f0; }
-p { color: #9ca3af; }
-hr { border-color: #2a2d3a; }
+.auth-wrapper {
+    animation: fadeInUp 0.6s ease;
+}
 </style>
 """, unsafe_allow_html=True)
 
-    st.markdown("## Alignithm.AI")
-    st.markdown("AI-powered resume scoring and career tools")
-    st.markdown("---")
+    _, center, _ = st.columns([1, 2, 1])
 
-    if "auth_mode" not in st.session_state:
-        st.session_state["auth_mode"] = "login"
+    with center:
+        # ── Branding ──
+        st.markdown("""
+<div class="auth-wrapper" style="text-align:center;padding:2.5rem 0 1.5rem;">
+  <div style="font-size:2.4rem;font-weight:800;
+              background:linear-gradient(135deg,#FFFFFF 0%,#8B5CF6 50%,#6366F1 100%);
+              -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+              font-family:'Inter',sans-serif;letter-spacing:-0.03em;
+              margin-bottom:0.3rem;">
+    Alignithm.AI
+  </div>
+  <p style="color:#8B8BA8;font-size:0.95rem;font-family:'Inter',sans-serif;margin:0;">
+    Your AI-powered career intelligence platform
+  </p>
+  <div style="display:inline-block;background:rgba(139,92,246,0.1);
+              border:1px solid rgba(139,92,246,0.2);border-radius:20px;
+              padding:0.2rem 0.8rem;font-size:0.65rem;color:#A78BFA;
+              font-weight:600;letter-spacing:0.08em;margin-top:0.6rem;
+              font-family:'Inter',sans-serif;text-transform:uppercase;">
+    v1.0 · Resume · Match · Cover Letter · Skill Gap
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("Sign In", use_container_width=True, key="switch_login"):
-            st.session_state["auth_mode"] = "login"
-            st.rerun()
-    with col_b:
-        if st.button("Create Account", use_container_width=True, key="switch_register"):
-            st.session_state["auth_mode"] = "register"
-            st.rerun()
+        # ── Auth Card ──
+        st.markdown("""
+<div style="background:rgba(19,19,43,0.7);border:1px solid rgba(139,92,246,0.15);
+            border-radius:16px;padding:0.6rem;margin:0 auto;max-width:420px;
+            backdrop-filter:blur(16px);
+            box-shadow:0 8px 40px rgba(10,10,27,0.5);">
+""", unsafe_allow_html=True)
 
-    st.markdown("---")
+        tab_login, tab_register = st.tabs(["Sign In", "Create Account"])
 
-    if st.session_state["auth_mode"] == "login":
-        st.markdown("##### Sign In")
-        with st.form("login_form"):
-            login_email = st.text_input("Email", key="li_email")
-            login_pass = st.text_input("Password", type="password", key="li_pass")
-            submitted = st.form_submit_button("Sign In", use_container_width=True)
+        with tab_login:
+            with st.form("login_form"):
+                email = st.text_input("📧 Email", placeholder="you@example.com")
+                password = st.text_input("🔒 Password", type="password", placeholder="Enter your password")
+                submitted = st.form_submit_button("Sign In", use_container_width=True)
+                if submitted:
+                    if not email or not password:
+                        st.error("Please enter both email and password.")
+                    else:
+                        r = api("POST", "/auth/login", json={"email": email, "password": password})
+                        if r and r.ok:
+                            data = r.json()
+                            st.session_state["token"] = data["access_token"]
+                            st.session_state["user"] = data.get("user", {})
+                            st.rerun()
+                        elif r:
+                            st.error(r.json().get("detail", "Login failed."))
 
-        if submitted:
-            if not login_email or not login_pass:
-                st.error("Enter email and password.")
-            else:
-                with st.spinner("Signing in..."):
-                    r = api("POST", "/auth/login", json={"email": login_email, "password": login_pass})
-                if r is None:
-                    pass  # error already shown by api()
-                elif r.status_code == 200:
-                    data = r.json()
-                    st.session_state["token"] = data["access_token"]
-                    st.session_state["user"] = data["user"]
-                    st.rerun()
-                else:
-                    try:
-                        st.error(r.json().get("detail", "Login failed."))
-                    except Exception:
-                        st.error(f"Login failed (HTTP {r.status_code}).")
+        with tab_register:
+            with st.form("register_form"):
+                name = st.text_input("👤 Name", placeholder="Your full name")
+                email_r = st.text_input("📧 Email", placeholder="you@example.com", key="reg_email")
+                password_r = st.text_input("🔒 Password", type="password", placeholder="Create a password", key="reg_pass")
+                submitted_r = st.form_submit_button("Create Account", use_container_width=True)
+                if submitted_r:
+                    if not name or not email_r or not password_r:
+                        st.error("All fields are required.")
+                    elif len(password_r) < 6:
+                        st.error("Password must be at least 6 characters.")
+                    else:
+                        r = api("POST", "/auth/register", json={
+                            "name": name, "email": email_r, "password": password_r
+                        })
+                        if r and r.ok:
+                            data = r.json()
+                            st.session_state["token"] = data["access_token"]
+                            st.session_state["user"] = data.get("user", {})
+                            st.rerun()
+                        elif r:
+                            st.error(r.json().get("detail", "Registration failed."))
 
-    else:
-        st.markdown("##### Create Account")
-        with st.form("register_form"):
-            reg_name = st.text_input("Full Name", key="re_name")
-            reg_email = st.text_input("Email", key="re_email")
-            reg_pass = st.text_input("Password", type="password", key="re_pass")
-            submitted = st.form_submit_button("Create Account", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        if submitted:
-            if not reg_name or not reg_email or not reg_pass:
-                st.error("Fill all fields.")
-            elif len(reg_pass) < 8:
-                st.error("Password must be at least 8 characters.")
-            else:
-                with st.spinner("Creating account..."):
-                    r = api("POST", "/auth/register", json={
-                        "name": reg_name,
-                        "email": reg_email,
-                        "password": reg_pass
-                    })
-                if r is None:
-                    pass  # error already shown by api()
-                elif r.status_code == 200:
-                    data = r.json()
-                    st.session_state["token"] = data["access_token"]
-                    st.session_state["user"] = data["user"]
-                    st.rerun()
-                else:
-                    try:
-                        st.error(r.json().get("detail", "Registration failed."))
-                    except Exception:
-                        st.error(f"Registration failed (HTTP {r.status_code}).")
+        # ── Footer ──
+        st.markdown("""
+<div style="text-align:center;padding:1.5rem 0 0.5rem;">
+  <p style="color:#4B4B6B;font-size:0.72rem;font-family:'Inter',sans-serif;">
+    AI-powered resume matching · Cover letter generation · Skill gap analysis
+  </p>
+</div>
+""", unsafe_allow_html=True)

@@ -116,11 +116,14 @@ class JobDescriptionCreate(BaseModel):
 class JobDescriptionOut(BaseModel):
     id: int
     user_id: int
-    raw_text: Optional[str]
-    parsed_json: Optional[Any]
-    source_url: Optional[str]
-    company_name: Optional[str]
-    job_title: Optional[str]
+    raw_text: Optional[str] = None
+    parsed_json: Optional[Any] = None
+    source_url: Optional[str] = None
+    company_name: Optional[str] = None
+    job_title: Optional[str] = None
+    description: Optional[str] = None
+    required_skills: Optional[List[str]] = []
+    preferred_skills: Optional[List[str]] = []
     created_at: datetime
 
     class Config:

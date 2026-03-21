@@ -61,11 +61,19 @@ def embed_text(text: str, user_api_key: str = None, provider: str = "gemini") ->
         return embed_text_openai(text, api_key=user_api_key)
 
     client = _get_client(user_api_key)
-    response = client.models.embed_content(
-        model=EMBEDDING_MODEL,
-        contents=text[:8000],  # guard against overly long input
-    )
-    return list(response.embeddings[0].values)
+    try:
+        response = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=text[:8000],  # guard against overly long input
+        )
+        return list(response.embeddings[0].values)
+    except Exception as e:
+        logger.warning(f"Primary embedding failed ({str(e)}), trying fallback embedding-001...")
+        response = client.models.embed_content(
+            model="models/text-embedding-004", # Some older keys require the 'models/' prefix
+            contents=text[:8000]
+        )
+        return list(response.embeddings[0].values)
 
 
 def extract_json(text: str) -> dict | list:

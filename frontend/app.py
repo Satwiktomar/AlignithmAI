@@ -1,160 +1,145 @@
 import streamlit as st
-import os
 from utils.styles import apply_styles
-from utils.auth import show_auth_page, api
 
 st.set_page_config(
     page_title="Alignithm.AI",
+    page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 apply_styles()
 
-if "token" not in st.session_state:
-    pass  # Token stored in session state only (not URL params for security)
 
-if "token" not in st.session_state:
-    show_auth_page()
-    st.stop()
+def main():
+    from utils.auth import is_logged_in, show_auth_page, api
 
-user = st.session_state.get("user", {})
+    if not is_logged_in():
+        show_auth_page()
+        return
 
-NAV_ITEMS = {
-    "Dashboard": "dashboard",
-    "Resume": "resume",
-    "Jobs": "jobs",
-    "Match": "match",
-    "Cover Letter": "coverletter",
-    "Skill Gap": "skillgap",
-    "Roadmap": "roadmap",
-    "Recruiter Sim": "recruiter",
-    "Projects": "projects",
-    "Versions": "versions",
-    "Settings": "profile",
-}
+    # ── Sidebar ──
+    with st.sidebar:
+        # Logo / Branding
+        st.markdown("""
+<div style="text-align:center;padding:0.8rem 0 0.6rem;">
+  <div style="font-size:1.5rem;font-weight:800;
+              background:linear-gradient(135deg,#E8E8F0 0%,#8B5CF6 50%,#6366F1 100%);
+              -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+              font-family:'Inter',sans-serif;letter-spacing:-0.02em;">
+    Alignithm.AI
+  </div>
+  <div style="display:inline-block;background:rgba(139,92,246,0.15);
+              border:1px solid rgba(139,92,246,0.25);border-radius:20px;
+              padding:0.15rem 0.7rem;font-size:0.65rem;color:#A78BFA;
+              font-weight:600;letter-spacing:0.08em;margin-top:0.3rem;
+              font-family:'Inter',sans-serif;text-transform:uppercase;">
+    ✨ Career Intelligence
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-if "page" not in st.session_state:
-    st.session_state["page"] = "dashboard"
+        st.markdown('<div style="height:0.3rem;"></div>', unsafe_allow_html=True)
 
-with st.sidebar:
-    st.markdown(
-        "<div style='padding:0.5rem 0 0.25rem;font-size:1.1rem;font-weight:700;color:#f0f0f0;'>Alignithm.AI</div>",
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        "<div style='font-size:0.78rem;color:#6b7280;margin-bottom:0.75rem;'>Career Intelligence Platform</div>",
-        unsafe_allow_html=True
-    )
-    st.markdown("<hr style='border-color:#2a2d3a;margin:0.5rem 0;'>", unsafe_allow_html=True)
+        PAGES = {
+            "📊 Dashboard":     "dashboard",
+            "📄 Resume":        "resume",
+            "💼 Jobs":          "jobs",
+            "🎯 Match Report":  "match",
+            "✉️ Cover Letter":  "coverletter",
+            "📈 Skill Gap":     "skillgap",
+            "🗺️ Roadmap":       "roadmap",
+            "🎭 Recruiter Sim": "recruiter",
+            "🚀 Projects":      "projects",
+            "📋 Versions":      "versions",
+            "⚙️ Settings":      "profile",
+        }
 
-    selected = st.radio(
-        "Navigation",
-        options=list(NAV_ITEMS.keys()),
-        index=list(NAV_ITEMS.values()).index(st.session_state["page"]),
-        label_visibility="collapsed"
-    )
+        choice = st.radio(
+            "Navigation",
+            list(PAGES.keys()),
+            label_visibility="collapsed",
+            key="nav",
+        )
+        page_key = PAGES[choice]
 
-    st.session_state["page"] = NAV_ITEMS[selected]
+        st.markdown("""
+<div style="height:1px;background:linear-gradient(90deg,transparent,rgba(139,92,246,0.25),transparent);
+            margin:0.8rem 0;"></div>
+""", unsafe_allow_html=True)
 
-    st.markdown("<hr style='border-color:#2a2d3a;margin:0.5rem 0;'>", unsafe_allow_html=True)
+        # ── AI Provider Toggle ──
+        user = st.session_state.get("user", {})
+        provider = user.get("ai_provider", "gemini")
+        has_key = user.get("has_api_key", False)
 
-    # AI Model Toggle
-    ollama_status = None
-    try:
-        import requests as _req
-        _backend = os.getenv("BACKEND_URL", "http://localhost:8000")
-        _r = api("GET", "/advanced/ollama-status")
-        if _r and _r.ok:
-            ollama_status = _r.json()
-    except Exception:
-        pass
+        dot_color = "#22c55e" if has_key else "#f59e0b"
+        st.markdown(f"""
+<div style="background:rgba(19,19,43,0.6);border:1px solid rgba(139,92,246,0.12);
+            border-radius:10px;padding:0.6rem 0.8rem;margin:0.3rem 0;">
+  <div style="font-size:0.65rem;color:#6B6B8D;text-transform:uppercase;
+              letter-spacing:0.08em;font-weight:600;font-family:'Inter',sans-serif;">
+    AI Provider
+  </div>
+  <div style="font-size:0.85rem;font-weight:600;color:#E8E8F0;margin-top:0.15rem;
+              font-family:'Inter',sans-serif;">
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                 background:{dot_color};margin-right:6px;vertical-align:middle;
+                 box-shadow:0 0 6px {dot_color}60;"></span>
+    {provider.upper()}
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-    ollama_available = ollama_status.get("available", False) if ollama_status else False
-    ollama_ready = ollama_status.get("model_ready", False) if ollama_status else False
-    status_dot = "🟢" if ollama_ready else ("🟡" if ollama_available else "🔴")
+        # ── API Key Warning ──
+        if not has_key:
+            st.markdown("""
+<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);
+            border-radius:10px;padding:0.6rem 0.8rem;margin-top:0.5rem;">
+  <div style="font-size:0.78rem;color:#FCD34D;font-weight:600;
+              font-family:'Inter',sans-serif;">
+    ⚠️ API key not configured
+  </div>
+  <div style="font-size:0.7rem;color:#9B9BB0;margin-top:0.2rem;
+              font-family:'Inter',sans-serif;">
+    Go to Settings to add your key
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-    current_pref = user.get("prefer_local_model", False)
+        st.markdown("""
+<div style="height:1px;background:linear-gradient(90deg,transparent,rgba(139,92,246,0.25),transparent);
+            margin:0.8rem 0;"></div>
+""", unsafe_allow_html=True)
 
-    use_local = st.toggle(
-        f"🖥️ Local AI {status_dot}",
-        value=current_pref,
-        help="Toggle ON to use local Ollama model. Toggle OFF to use Gemini Cloud AI.",
-        key="local_ai_toggle"
-    )
+        # ── User info / Sign out ──
+        email = user.get("email", "")
+        if email:
+            st.markdown(f"""
+<div style="font-size:0.75rem;color:#8B8BA8;font-family:'Inter',sans-serif;
+            padding:0 0.2rem;">
+  <span style="color:#A78BFA;">●</span> {email}
+</div>
+""", unsafe_allow_html=True)
 
-    if use_local != current_pref:
-        r_toggle = api("PUT", "/auth/me", json={"prefer_local_model": use_local})
-        if r_toggle and r_toggle.ok:
-            st.session_state["user"]["prefer_local_model"] = use_local
+        if st.button("Sign Out", use_container_width=True):
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
             st.rerun()
 
-    provider_name = user.get("ai_provider", "gemini").upper()
-    mode_label = "Local AI (Ollama)" if use_local else f"Cloud AI ({provider_name})"
-    st.markdown(
-        f"<div style='font-size:0.72rem;color:#6b7280;margin:-0.25rem 0 0.5rem;'>{mode_label}</div>",
-        unsafe_allow_html=True
+    # ── Page Router ──
+    from pages_custom import (
+        dashboard, resume, jobs, match, coverletter,
+        skillgap, roadmap, recruiter, projects, versions, profile,
     )
+    router = {
+        "dashboard": dashboard, "resume": resume, "jobs": jobs,
+        "match": match, "coverletter": coverletter, "skillgap": skillgap,
+        "roadmap": roadmap, "recruiter": recruiter, "projects": projects,
+        "versions": versions, "profile": profile,
+    }
+    router[page_key].render()
 
-    st.markdown("<hr style='border-color:#2a2d3a;margin:0.5rem 0;'>", unsafe_allow_html=True)
-    st.markdown(
-        f"<div style='font-size:0.78rem;color:#6b7280;margin-bottom:0.5rem;'>{user.get('email', '')}</div>",
-        unsafe_allow_html=True
-    )
 
-    if st.button("Sign Out", use_container_width=True):
-        st.query_params.clear()
-        st.session_state.clear()
-        st.rerun()
-
-if not user.get("has_api_key", False) and not user.get("prefer_local_model", False):
-    provider = user.get("ai_provider", "gemini")
-    if provider == "openai":
-        st.warning(
-            "No OpenAI API key configured — AI features won't work. "
-            "Go to **Settings** → **API Keys** to add yours.",
-            icon="⚠️"
-        )
-    else:
-        st.warning(
-            "No Gemini API key configured — AI features won't work. "
-            "Go to **Settings** → **API Keys** to add yours (free at [aistudio.google.com](https://aistudio.google.com)), "
-            "or switch to OpenAI in Settings.",
-            icon="⚠️"
-        )
-
-page = st.session_state["page"]
-
-if page == "dashboard":
-    from pages_custom.dashboard import render
-    render()
-elif page == "resume":
-    from pages_custom.resume import render
-    render()
-elif page == "jobs":
-    from pages_custom.jobs import render
-    render()
-elif page == "match":
-    from pages_custom.match import render
-    render()
-elif page == "coverletter":
-    from pages_custom.coverletter import render
-    render()
-elif page == "skillgap":
-    from pages_custom.skillgap import render
-    render()
-elif page == "roadmap":
-    from pages_custom.roadmap import render
-    render()
-elif page == "recruiter":
-    from pages_custom.recruiter import render
-    render()
-elif page == "projects":
-    from pages_custom.projects import render
-    render()
-elif page == "versions":
-    from pages_custom.versions import render
-    render()
-elif page == "profile":
-    from pages_custom.profile import render
-    render()
+if __name__ == "__main__":
+    main()
